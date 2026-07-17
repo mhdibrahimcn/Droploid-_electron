@@ -1,39 +1,34 @@
 #!/usr/bin/env bash
-# Droploid CLI installer (macOS + Linux). Builds from source if no packaged app is found,
-# then drops a `droploid` shim on your PATH.
-#   curl -fsSL <raw-url>/install.sh | bash      # or: ./install.sh
+# Droploid CLI installer (macOS + Linux). One-liner:
+#   curl -fsSL https://raw.githubusercontent.com/mhdibrahimcn/droploid-cli/main/install.sh | bash
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+REPO="https://github.com/mhdibrahimcn/Droploid-_electron.git"
+DIR="${DROPLOID_HOME:-$HOME/.droploid}"
 
-# Pick a bin dir already on PATH, preferring system dirs on mac.
-pick_bindir() {
-  for d in /usr/local/bin "$HOME/.local/bin"; do
-    case ":$PATH:" in *":$d:"*) [ -w "$d" ] || [ ! -e "$d" ] && { echo "$d"; return; } ;; esac
-  done
-  echo "$HOME/.local/bin"
-}
-BINDIR="$(pick_bindir)"
-mkdir -p "$BINDIR"
+command -v git >/dev/null || { echo "droploid: git is required"; exit 1; }
+command -v npm >/dev/null || { echo "droploid: Node.js (npm) is required"; exit 1; }
 
-APP="/Applications/Droploid.app/Contents/MacOS/Droploid"
-if [ -x "$APP" ]; then
-  echo "→ Using installed Droploid.app"
-  TARGET_CMD="exec \"$APP\" --cli \"\$@\""
+if [ -d "$DIR/.git" ]; then
+  echo "→ Updating $DIR"
+  git -C "$DIR" pull --ff-only -q
 else
-  echo "→ Building Droploid from source ($REPO_DIR)"
-  command -v npm >/dev/null || { echo "npm required (install Node.js first)"; exit 1; }
-  ( cd "$REPO_DIR" && { [ -d node_modules ] || npm ci; } && npm run build )
-  TARGET_CMD="exec \"$REPO_DIR/node_modules/.bin/electron\" \"$REPO_DIR/out/main/index.js\" --cli \"\$@\""
+  echo "→ Cloning Droploid to $DIR"
+  git clone -q "$REPO" "$DIR"
 fi
 
-SHIM="$BINDIR/droploid"
-cat > "$SHIM" <<EOF
-#!/usr/bin/env bash
-$TARGET_CMD
-EOF
-chmod +x "$SHIM"
+echo "→ Building (first run takes a minute)"
+( cd "$DIR" && npm ci --silent && npm run build >/dev/null )
 
-echo "✓ Installed: $SHIM"
-case ":$PATH:" in *":$BINDIR:"*) ;; *) echo "  ⚠ Add to PATH:  export PATH=\"$BINDIR:\$PATH\"" ;; esac
-echo "  Try:  droploid help"
+BIN="${DROPLOID_BIN:-/usr/local/bin}"
+[ -w "$BIN" ] || BIN="$HOME/.local/bin"
+mkdir -p "$BIN"
+cat > "$BIN/droploid" <<EOF
+#!/usr/bin/env bash
+exec "$DIR/node_modules/.bin/electron" "$DIR/out/main/index.js" --cli "\$@"
+EOF
+chmod +x "$BIN/droploid"
+
+echo "✓ Installed → $BIN/droploid"
+case ":$PATH:" in *":$BIN:"*) ;; *) echo "  Add to PATH:  export PATH=\"$BIN:\$PATH\"" ;; esac
+echo "  Get started:  droploid setup"

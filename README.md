@@ -27,28 +27,22 @@ droploid deploy --app "MyApp" --platform both --track production --bump patch --
 
 ## Install
 
-### Homebrew (macOS & Linux)
-
-```bash
-brew install --HEAD mhdibrahimcn/tap/droploid
-# or, from this repo:
-brew install --HEAD ./HomebrewFormula/droploid.rb
-```
-
-### One-line script
+**One line (macOS & Linux):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mhdibrahimcn/Droploid-_electron/main/install.sh | bash
 ```
 
-### From source
+It clones Droploid to `~/.droploid`, builds it, and drops a `droploid` command on your `PATH`
+(`/usr/local/bin` or `~/.local/bin`). Re-run any time to update. Override with `DROPLOID_HOME` / `DROPLOID_BIN`.
+
+**Homebrew:**
 
 ```bash
-git clone https://github.com/mhdibrahimcn/Droploid-_electron.git
-cd Droploid-_electron && npm ci && npm run build && ./install.sh
+brew install --HEAD mhdibrahimcn/tap/droploid   # or: brew install --HEAD ./HomebrewFormula/droploid.rb
 ```
 
-`install.sh` builds the app and drops a `droploid` shim on your `PATH` (`/usr/local/bin` or `~/.local/bin`).
+Requires **git** and **Node.js**. iOS builds also need macOS + Xcode.
 
 ---
 
