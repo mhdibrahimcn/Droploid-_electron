@@ -47,7 +47,15 @@ else
     && NEED_DEPS=0
 fi
 
-if [ "$NEED_DEPS" = 1 ]; then spin "Installing dependencies" bash -c "cd '$DIR' && npm ci --silent"; else echo "  ✓ Dependencies up to date"; fi
+if [ "$NEED_DEPS" = 1 ]; then
+  DEPCOUNT="$(node -p "Object.keys({...require('$DIR/package.json').dependencies, ...require('$DIR/package.json').devDependencies}).length" 2>/dev/null || echo '?')"
+  echo "→ Installing $DEPCOUNT direct dependencies (first run — downloads these + their deps):"
+  node -p "Object.keys({...require('$DIR/package.json').dependencies, ...require('$DIR/package.json').devDependencies}).join(', ')" 2>/dev/null | fold -s -w 74 | sed 's/^/    /' || true
+  ( cd "$DIR" && npm ci --no-audit --no-fund )   # not --silent: shows npm's live progress
+  echo "  ✓ Dependencies installed"
+else
+  echo "  ✓ Dependencies up to date"
+fi
 if [ "$NEED_BUILD" = 1 ]; then spin "Building Droploid" bash -c "cd '$DIR' && npm run build >/dev/null 2>&1"; else echo "  ✓ Build up to date"; fi
 
 # Release tools — best-effort, once. fastlane gives `fastlane supply` (Play upload);
