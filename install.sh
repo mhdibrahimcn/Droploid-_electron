@@ -26,14 +26,29 @@ spin() {
   return $rc
 }
 
+BEFORE=""
 if [ -d "$DIR/.git" ]; then
+  BEFORE="$(git -C "$DIR" rev-parse HEAD)"
   spin "Updating Droploid" git -C "$DIR" pull --ff-only -q
 else
   spin "Cloning Droploid → $DIR" git clone -q "$REPO" "$DIR"
 fi
+AFTER="$(git -C "$DIR" rev-parse HEAD)"
 
-spin "Installing dependencies" bash -c "cd '$DIR' && npm ci --silent"
-spin "Building Droploid"       bash -c "cd '$DIR' && npm run build >/dev/null 2>&1"
+# Skip work that's already done: deps only when the lockfile changed (or node_modules missing),
+# build only when the code changed (or out/ missing). Makes no-change re-runs near-instant.
+NEED_DEPS=1; NEED_BUILD=1
+if [ -n "$BEFORE" ] && [ "$BEFORE" = "$AFTER" ]; then
+  [ -d "$DIR/node_modules" ] && NEED_DEPS=0
+  [ -d "$DIR/out" ] && NEED_BUILD=0
+else
+  [ -d "$DIR/node_modules" ] && [ -n "$BEFORE" ] \
+    && git -C "$DIR" diff --quiet "$BEFORE" "$AFTER" -- package-lock.json package.json 2>/dev/null \
+    && NEED_DEPS=0
+fi
+
+if [ "$NEED_DEPS" = 1 ]; then spin "Installing dependencies" bash -c "cd '$DIR' && npm ci --silent"; else echo "  ✓ Dependencies up to date"; fi
+if [ "$NEED_BUILD" = 1 ]; then spin "Building Droploid" bash -c "cd '$DIR' && npm run build >/dev/null 2>&1"; else echo "  ✓ Build up to date"; fi
 
 # Release tools — best-effort, once. fastlane gives `fastlane supply` (Play upload);
 # cocoapods is needed for iOS. Skipped if present. Set DROPLOID_NO_TOOLS=1 to skip.
