@@ -134,6 +134,11 @@ one source of truth for orgs, apps, and build history.
 - **Node.js** 18+ (build) · **Flutter**, **fastlane**, **CocoaPods** on `PATH` (run `droploid tools`)
 - **iOS**: macOS + Xcode · **Android**: any macOS/Linux · **OTA**: Shorebird CLI
 
+## Repos
+
+- **This repo** — the Electron app + CLI source.
+- **[droploid-cli](https://github.com/mhdibrahimcn/droploid-cli)** — distribution repo (installer, Homebrew formula, agent skill) with this app as a submodule. Use it for a clean `git clone --recurse-submodules && ./install.sh`.
+
 ## License
 
 MIT
