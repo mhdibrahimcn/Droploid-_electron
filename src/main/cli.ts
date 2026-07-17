@@ -3,6 +3,8 @@
 // Convention: human/log output → stderr, machine result → stdout. `--json` makes stdout parseable
 // for AI agents. Exits the process itself (app.exit) with 0=ok, 1=error/failed.
 import { randomUUID } from 'crypto'
+import { existsSync } from 'fs'
+import { homedir } from 'os'
 import { join } from 'path'
 import { store } from './services/store'
 import { setCredential } from './services/keychain'
@@ -64,6 +66,7 @@ USAGE
   droploid --help
 
 COMMANDS
+  setup                                Interactive first-time setup (no flags — just answer prompts)
   orgs                                 List organisations
   apps [--org <id|name>]               List linked apps
   tools                                Check required toolchain (flutter, fastlane, xcode…)
@@ -79,6 +82,9 @@ COMMANDS
 
 CREDS (config-org)
   --ios-key-id <k> --ios-issuer-id <i> --ios-team-id <t> --ios-p8 <path> --android-json <path>
+  iOS: App Store Connect ▸ Users and Access ▸ Integrations ▸ App Store Connect API (Issuer ID + Key ID + .p8)
+  Android: Google Cloud Console ▸ IAM & Admin ▸ Service Accounts ▸ Keys ▸ Add key ▸ JSON, then grant it in Play Console
+  Tip: run "droploid setup" for a guided, no-flags walkthrough.
 
 DEPLOY OPTIONS
   --platform ios|android|both   (default both)
@@ -220,6 +226,131 @@ async function cmdPreflight(p: Parsed, json: boolean): Promise<never> {
   return done(blocked ? 1 : 0, json, { passed: !blocked, checks })
 }
 
+// ── interactive setup (deploy.sh-style menus; no flags to memorise) ───────────
+// Human-only (ignores --json). Prompts go to stdout with no trailing newline.
+const C = { cyan: '\x1b[36m', green: '\x1b[32m', yellow: '\x1b[33m', bold: '\x1b[1m', dim: '\x1b[2m', reset: '\x1b[0m' }
+function banner(title: string): void {
+  out(`\n${C.cyan}${C.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n  ${title}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}\n`)
+}
+
+// Manual line reader. readline/promises loses buffered lines when a piped stream hits EOF
+// between questions (hangs). This queues lines and resolves pending asks; on EOF, unanswered
+// asks resolve to null → works for a live TTY *and* piped input (no hang).
+function makePrompter(): { q: (prompt: string) => Promise<string | null>; close: () => void } {
+  const stdin = process.stdin
+  stdin.setEncoding('utf8')
+  const queued: string[] = []
+  const waiters: ((v: string | null) => void)[] = []
+  let buf = ''
+  let closed = false
+  const push = (line: string): void => { const w = waiters.shift(); if (w) w(line); else queued.push(line) }
+  stdin.on('data', (chunk: string) => {
+    buf += chunk
+    let nl: number
+    while ((nl = buf.indexOf('\n')) >= 0) { push(buf.slice(0, nl).replace(/\r$/, '')); buf = buf.slice(nl + 1) }
+  })
+  stdin.on('end', () => { closed = true; if (buf.length) push(buf); buf = ''; while (waiters.length) waiters.shift()!(null) })
+  stdin.resume()
+  return {
+    q: (prompt: string) => {
+      process.stdout.write(prompt)
+      if (queued.length) return Promise.resolve(queued.shift()!)
+      if (closed) return Promise.resolve(null)
+      return new Promise((res) => waiters.push(res))
+    },
+    close: () => stdin.pause()
+  }
+}
+
+async function cmdSetup(): Promise<never> {
+  const rl = makePrompter()
+  const ask = async (label: string, def = ''): Promise<string> => {
+    const a = await rl.q(`  ${label}${def ? ` ${C.dim}[${def}]${C.reset}` : ''}: `)
+    return (a ?? '').trim() || def
+  }
+  // returns '' when skipped, null on EOF for a required field (caller aborts)
+  const askPath = async (label: string, required: boolean): Promise<string | null> => {
+    for (;;) {
+      const raw = await rl.q(`  ${label}${required ? '' : ` ${C.dim}(Enter to skip)${C.reset}`}: `)
+      if (raw === null) return required ? null : ''
+      const path = raw.trim().replace(/^~/, homedir())
+      if (!path) { if (!required) return ''; out(`  ${C.yellow}⚠ required${C.reset}`); continue }
+      if (existsSync(path)) return path
+      out(`  ${C.yellow}⚠ file not found: ${path}${C.reset}`)
+    }
+  }
+
+  banner('🚀 Droploid setup')
+  out('  What do you want to do?')
+  out('  1) Create a profile (organisation + signing credentials)')
+  out('  2) Link an app to a profile')
+  out(`  3) Both — first-time setup ${C.dim}(recommended)${C.reset}\n`)
+  const choice = await ask('Choose', '3')
+  const doOrg = choice === '1' || choice === '3'
+  const doLink = choice === '2' || choice === '3'
+
+  let orgId: string | undefined
+  let orgName: string | undefined
+
+  if (doOrg) {
+    banner('🏢 New profile')
+    orgName = await ask('Profile / organisation name')
+    if (!orgName) { rl.close(); err('setup: name required'); return done(1, false, {}) }
+
+    out(`\n  ${C.bold}🍎 iOS — App Store Connect${C.reset} ${C.dim}(Enter to skip iOS)${C.reset}`)
+    out(`  ${C.dim}Where: appstoreconnect.apple.com ▸ Users and Access ▸ Integrations ▸ App Store Connect API${C.reset}`)
+    out(`  ${C.dim}Issuer ID sits above the keys table · Key ID is next to your key · download the .p8 once (can't re-download)${C.reset}`)
+    const iosKeyID = await ask('Key ID')
+    const iosIssuerID = iosKeyID ? await ask('Issuer ID (UUID)') : ''
+    const iosTeamID = iosKeyID ? await ask('Apple Team ID (optional)') : ''
+    const iosP8Path = iosKeyID ? (await askPath('Path to .p8 private key', false)) ?? '' : ''
+
+    out(`\n  ${C.bold}🤖 Android — Play Store${C.reset} ${C.dim}(Enter to skip Android)${C.reset}`)
+    out(`  ${C.dim}Where: console.cloud.google.com ▸ IAM & Admin ▸ Service Accounts ▸ (your account) ▸ Keys ▸ Add key ▸ JSON${C.reset}`)
+    out(`  ${C.dim}Then Play Console ▸ Users and permissions / API access ▸ grant that service-account email (Admin or Release manager)${C.reset}`)
+    const androidJsonPath = (await askPath('Path to service-account .json', false)) ?? ''
+
+    orgId = randomUUID()
+    if (iosKeyID) await setCredential(orgId, 'ios_key_id', iosKeyID)
+    if (iosIssuerID) await setCredential(orgId, 'ios_issuer_id', iosIssuerID)
+    if (iosTeamID) await setCredential(orgId, 'ios_team_id', iosTeamID)
+    if (iosP8Path) await setCredential(orgId, 'ios_p8_path', iosP8Path)
+    if (androidJsonPath) await setCredential(orgId, 'android_json_path', androidJsonPath)
+    const org: Organisation = { id: orgId, name: orgName, createdAt: new Date().toISOString() }
+    store.set('organisations', [...store.get('organisations', []), org])
+    out(`\n  ${C.green}✓ Profile "${orgName}" saved${C.reset}  ${C.dim}(${orgId})${C.reset}`)
+  }
+
+  if (doLink) {
+    banner('📱 Link an app')
+    if (!orgId) {
+      const orgs = store.get('organisations', [])
+      if (!orgs.length) { rl.close(); err('setup: no profiles yet — run setup and choose option 1 or 3'); return done(1, false, {}) }
+      orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
+      const pick = await ask('\n  Which profile', '1')
+      const org = orgs[Number(pick) - 1] ?? findOrg(pick)
+      if (!org) { rl.close(); err('setup: invalid profile'); return done(1, false, {}) }
+      orgId = org.id; orgName = org.name
+    }
+    const dir = await askPath('App project folder', true)
+    if (!dir) { rl.close(); err('setup: app folder required'); return done(1, false, {}) }
+    const meta = detect(dir)
+    const appRec: LinkedApp = {
+      id: randomUUID(), organisationId: orgId, dirPath: dir, name: meta.name,
+      bundleID: meta.bundleID, packageName: meta.packageName, currentVersion: meta.version,
+      projectType: meta.projectType, xcodeSchemeName: meta.schemeName, iconPath: meta.iconPath,
+      linkedAt: new Date().toISOString()
+    }
+    store.set('apps', [...store.get('apps', []), appRec])
+    out(`\n  ${C.green}✓ Linked ${appRec.name}${C.reset}  ${meta.projectType} v${meta.version}  ${C.dim}(${appRec.id})${C.reset}`)
+    out(`\n  ${C.bold}Next:${C.reset}  droploid deploy "${appRec.name}"`)
+  }
+
+  rl.close()
+  out(`\n  ${C.green}${C.bold}Done.${C.reset} Run ${C.bold}droploid apps${C.reset} to see your apps.\n`)
+  return done(0, false, { orgId, orgName })
+}
+
 export async function runCli(processArgv: string[]): Promise<void> {
   const i = processArgv.indexOf('--cli')
   const argv = i >= 0 ? processArgv.slice(i + 1) : processArgv.slice(1)
@@ -262,6 +393,7 @@ export async function runCli(processArgv: string[]): Promise<void> {
         if (!runs.length) err('  (no build history)')
         return done(0, json, runs)
       }
+      case 'setup': return await cmdSetup()
       case 'link': return cmdLink(p, json)
       case 'config-org': return await cmdConfigOrg(p, json)
       case 'preflight': return await cmdPreflight(p, json)
