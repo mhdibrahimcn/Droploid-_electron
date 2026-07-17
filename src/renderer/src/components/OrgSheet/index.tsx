@@ -385,7 +385,7 @@ export function OrgSheet() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Acme Corp"
-                    className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-text-muted/50 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all font-medium"
+                    className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-4 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all font-medium"
                   />
                 </div>
 
@@ -399,7 +399,7 @@ export function OrgSheet() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What does your organization do?"
                     rows={2}
-                    className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-4 py-3 text-sm text-[var(--color-text-primary)] placeholder-text-muted/50 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all resize-none"
+                    className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-4 py-3 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all resize-none"
                   />
                 </div>
 
@@ -434,7 +434,7 @@ export function OrgSheet() {
                         value={creds.iosKeyID}
                         onChange={(e) => setCreds((c) => ({ ...c, iosKeyID: e.target.value }))}
                         placeholder="XXXXXXXXXX"
-                        className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder-text-muted/40 focus:outline-none focus:border-accent/50 font-mono"
+                        className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:outline-none focus:border-accent/50 font-mono"
                       />
                     </div>
                     <div className="space-y-1">
@@ -444,7 +444,7 @@ export function OrgSheet() {
                         value={creds.iosTeamID}
                         onChange={(e) => setCreds((c) => ({ ...c, iosTeamID: e.target.value }))}
                         placeholder="XXXXXXXXXX"
-                        className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder-text-muted/40 focus:outline-none focus:border-accent/50 font-mono"
+                        className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:outline-none focus:border-accent/50 font-mono"
                       />
                     </div>
                   </div>
@@ -455,7 +455,7 @@ export function OrgSheet() {
                       value={creds.iosIssuerID}
                       onChange={(e) => setCreds((c) => ({ ...c, iosIssuerID: e.target.value }))}
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder-text-muted/40 focus:outline-none focus:border-accent/50 font-mono"
+                      className="w-full bg-[var(--color-bg-input)] border border-[var(--color-border-strong)] rounded-lg px-3 py-2 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:outline-none focus:border-accent/50 font-mono"
                     />
                   </div>
                   <div className="space-y-1">

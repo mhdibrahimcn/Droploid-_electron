@@ -39,7 +39,9 @@ It clones Droploid to `~/.droploid`, builds it, and drops a `droploid` command o
 **Homebrew:**
 
 ```bash
-brew install mhdibrahimcn/tap/droploid
+brew tap mhdibrahimcn/tap
+brew trust mhdibrahimcn/tap        # Homebrew now requires trusting third-party taps
+brew install droploid
 ```
 
 Requires **git** and **Node.js**. iOS builds also need macOS + Xcode.

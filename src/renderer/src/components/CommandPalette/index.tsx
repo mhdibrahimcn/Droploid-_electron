@@ -132,7 +132,7 @@ export function CommandPalette(): JSX.Element {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search commands…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-placeholder)]"
             style={{ color: 'var(--color-text-primary)' }}
           />
           <kbd

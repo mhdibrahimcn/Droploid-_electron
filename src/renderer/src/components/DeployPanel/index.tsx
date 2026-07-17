@@ -651,7 +651,7 @@ function PlatformStep({ app, platform, setPlatform, track, setTrack, rollout, se
           onChange={(e) => setReleaseNotes(e.target.value)}
           rows={4}
           placeholder="What's new in this release?"
-          className="w-full px-3.5 py-3 rounded-2xl text-[12px] resize-none outline-none transition-all glass-xs border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-indigo-500/30 focus:ring-1 focus:ring-indigo-500/20"
+          className="w-full px-3.5 py-3 rounded-2xl text-[12px] resize-none outline-none transition-all glass-xs border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-placeholder)] focus:border-indigo-500/30 focus:ring-1 focus:ring-indigo-500/20"
           style={{ background: 'var(--color-bg-input)', backdropFilter: 'blur(20px)' }}
         />
       </div>
