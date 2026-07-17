@@ -19,6 +19,14 @@ protocol.registerSchemesAsPrivileged([{
 // while the GUI is open, and never open a window (handled in whenReady below).
 const cliMode = process.argv.includes('--cli')
 
+if (cliMode) {
+  // Headless: no window means no GPU/compositor needed. Disabling it kills the noisy
+  // "GPU process exited"/"Network service crashed" stderr lines.
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
+
 if (!cliMode && !app.requestSingleInstanceLock()) {
   app.quit()
 }

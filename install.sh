@@ -9,23 +9,38 @@ DIR="${DROPLOID_HOME:-$HOME/.droploid}"
 command -v git >/dev/null || { echo "droploid: git is required"; exit 1; }
 command -v npm >/dev/null || { echo "droploid: Node.js (npm) is required"; exit 1; }
 
+# Run a command with a live spinner + elapsed time (falls back to plain wait if not a TTY).
+spin() {
+  local msg="$1"; shift
+  ( "$@" ) & local pid=$!
+  if [ ! -t 1 ]; then wait "$pid"; return $?; fi
+  local marks='|/-\' i=0 start=$SECONDS
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i + 1) % 4 ))
+    printf '\r  %s %s (%ds)   ' "${marks:$i:1}" "$msg" "$((SECONDS - start))"
+    sleep 0.15
+  done
+  wait "$pid"; local rc=$?
+  if [ $rc -eq 0 ]; then printf '\r  ✓ %s (%ds)        \n' "$msg" "$((SECONDS - start))"
+  else printf '\r  ✗ %s\n' "$msg"; fi
+  return $rc
+}
+
 if [ -d "$DIR/.git" ]; then
-  echo "→ Updating $DIR"
-  git -C "$DIR" pull --ff-only -q
+  spin "Updating Droploid" git -C "$DIR" pull --ff-only -q
 else
-  echo "→ Cloning Droploid to $DIR"
-  git clone -q "$REPO" "$DIR"
+  spin "Cloning Droploid → $DIR" git clone -q "$REPO" "$DIR"
 fi
 
-echo "→ Building (first run takes a minute)"
-( cd "$DIR" && npm ci --silent && npm run build >/dev/null )
+spin "Installing dependencies" bash -c "cd '$DIR' && npm ci --silent"
+spin "Building Droploid"       bash -c "cd '$DIR' && npm run build >/dev/null 2>&1"
 
 # Release tools — best-effort, once. fastlane gives `fastlane supply` (Play upload);
-# cocoapods is needed for iOS. Skipped if already present. Set DROPLOID_NO_TOOLS=1 to skip.
+# cocoapods is needed for iOS. Skipped if present. Set DROPLOID_NO_TOOLS=1 to skip.
 if [ "${DROPLOID_NO_TOOLS:-0}" != "1" ]; then
   if command -v brew >/dev/null; then
-    command -v fastlane >/dev/null || { echo "→ Installing fastlane"; brew install fastlane || true; }
-    command -v pod >/dev/null      || { echo "→ Installing cocoapods"; brew install cocoapods || true; }
+    command -v fastlane >/dev/null || spin "Installing fastlane"  brew install fastlane  || true
+    command -v pod >/dev/null      || spin "Installing cocoapods" brew install cocoapods || true
   else
     echo "  (Homebrew not found — install fastlane + cocoapods yourself; then run 'droploid tools')"
   fi
