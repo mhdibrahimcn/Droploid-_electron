@@ -1,9 +1,9 @@
 class Droploid < Formula
   desc "CLI to deploy Flutter & native iOS/Android apps to the App Store & Play Store"
-  homepage "https://github.com/mhdibrahimcn/droploid"
+  homepage "https://github.com/mhdibrahimcn/Droploid-_electron"
   license "MIT"
   # TODO: point at a release tarball + sha256 (or use `brew install --HEAD`).
-  head "https://github.com/mhdibrahimcn/droploid.git", branch: "main"
+  head "https://github.com/mhdibrahimcn/Droploid-_electron.git", branch: "main"
 
   depends_on "node"
 

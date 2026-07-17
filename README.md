@@ -38,14 +38,14 @@ brew install --HEAD ./HomebrewFormula/droploid.rb
 ### One-line script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mhdibrahimcn/droploid/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mhdibrahimcn/Droploid-_electron/main/install.sh | bash
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/mhdibrahimcn/droploid.git
-cd droploid && npm ci && npm run build && ./install.sh
+git clone https://github.com/mhdibrahimcn/Droploid-_electron.git
+cd Droploid-_electron && npm ci && npm run build && ./install.sh
 ```
 
 `install.sh` builds the app and drops a `droploid` shim on your `PATH` (`/usr/local/bin` or `~/.local/bin`).
@@ -60,9 +60,11 @@ droploid config-org --name "Acme" \
   --ios-key-id KID --ios-issuer-id IID --ios-team-id TID --ios-p8 ./AuthKey.p8 \
   --android-json ./play-service-account.json --json    # → {"id":"<orgId>","name":"Acme"}
 droploid link ./my_flutter_app --org "Acme" --json      # detect & link the project
-droploid preflight --app "my_flutter_app" --json        # {passed, checks[]}
-droploid deploy --app "my_flutter_app" --track production --bump patch --json
+droploid preflight my_flutter_app --json                # {passed, checks[]}
+droploid deploy my_flutter_app --track production --bump patch --json
 ```
+
+> The app can be passed positionally (`droploid deploy MyApp`) or via `--app MyApp`. Run `droploid --help` for the full list.
 
 ---
 
@@ -111,9 +113,9 @@ Every command accepts `--json`:
 Recommended flow:
 
 ```
-droploid apps --json                          → pick app id/name
-droploid preflight --app <ref> --json          → abort if passed=false, report blockers
-droploid deploy --app <ref> [flags] --json     → read {result}; exit 1 = failed
+droploid apps --json                     → pick app id/name
+droploid preflight <ref> --json           → abort if passed=false, report blockers
+droploid deploy <ref> [flags] --json      → read {result}; exit 1 = failed
 ```
 
 A ready-made **Claude Code / agent skill** ships in [`.claude/skills/droploid-deploy/`](.claude/skills/droploid-deploy/SKILL.md)
