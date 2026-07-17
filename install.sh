@@ -20,6 +20,17 @@ fi
 echo "→ Building (first run takes a minute)"
 ( cd "$DIR" && npm ci --silent && npm run build >/dev/null )
 
+# Release tools — best-effort, once. fastlane gives `fastlane supply` (Play upload);
+# cocoapods is needed for iOS. Skipped if already present. Set DROPLOID_NO_TOOLS=1 to skip.
+if [ "${DROPLOID_NO_TOOLS:-0}" != "1" ]; then
+  if command -v brew >/dev/null; then
+    command -v fastlane >/dev/null || { echo "→ Installing fastlane"; brew install fastlane || true; }
+    command -v pod >/dev/null      || { echo "→ Installing cocoapods"; brew install cocoapods || true; }
+  else
+    echo "  (Homebrew not found — install fastlane + cocoapods yourself; then run 'droploid tools')"
+  fi
+fi
+
 BIN="${DROPLOID_BIN:-/usr/local/bin}"
 [ -w "$BIN" ] || BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
@@ -31,4 +42,5 @@ chmod +x "$BIN/droploid"
 
 echo "✓ Installed → $BIN/droploid"
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "  Add to PATH:  export PATH=\"$BIN:\$PATH\"" ;; esac
+echo "  Check tools:  droploid tools"
 echo "  Get started:  droploid setup"
