@@ -1,0 +1,32 @@
+# Added by code-review-graph
+.code-review-graph/
+
+# Dependencies & build output
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+.vscode/
+*.log
+
+# Local env
+.env
+.env.local
+
+# Vendored multi-agent tool configs (not part of Droploid; keep .claude/ for our skill)
+.agents/
+.cursor/
+.cursorrules
+.gemini/
+.kiro/
+.qoder/
+.windsurfrules
+.opencode.json
+.mcp.json
+AGENTS.md
+GEMINI.md
+QODER.md
+skills-lock.json

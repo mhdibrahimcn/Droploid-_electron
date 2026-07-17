@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Droploid CLI wrapper. Runs the Electron main headless in --cli mode.
+# Resolve from the repo this script lives in, or override with DROPLOID_HOME / DROPLOID_APP.
+set -euo pipefail
+
+# Packaged mac app takes priority if present (or forced via DROPLOID_APP).
+APP="${DROPLOID_APP:-/Applications/Droploid.app/Contents/MacOS/Droploid}"
+if [ -x "$APP" ]; then
+  exec "$APP" --cli "$@"
+fi
+
+# Source mode: repo root = parent of this bin/ dir (or DROPLOID_HOME).
+HOME_DIR="${DROPLOID_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ELECTRON="$HOME_DIR/node_modules/.bin/electron"
+MAIN="$HOME_DIR/out/main/index.js"
+
+if [ ! -f "$MAIN" ]; then
+  echo "droploid: build not found ($MAIN). Run: npm run build" >&2
+  exit 1
+fi
+exec "$ELECTRON" "$MAIN" --cli "$@"

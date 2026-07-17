@@ -1,0 +1,325 @@
+@import 'tailwindcss';
+
+/* ─── Design tokens ──────────────────────────────── */
+/*
+ * Palette: "Zinc Neutral Dark"  (Linear / Vercel / GitHub dark style)
+ * Zinc = neutral warm-dark (no blue tint) — much clearer layer hierarchy
+ * than slate which blends together at similar lightness values.
+ *
+ * Layer steps:
+ *   base     #09090b  zinc-950  →  app shell / window bg
+ *   surface  #18181b  zinc-900  →  sidebar, panels
+ *   elevated #27272a  zinc-800  →  cards, rows, inputs
+ */
+@theme {
+  /* Backgrounds */
+  --color-bg-base:     #09090b;              /* zinc-950 */
+  --color-bg-surface:  #18181b;              /* zinc-900 */
+  --color-bg-elevated: #27272a;              /* zinc-800 */
+  --color-bg-overlay:  rgba(9, 9, 11, 0.94);
+  --color-bg-input:    #27272a;
+
+  /* Borders — zinc-700/zinc-600 */
+  --color-border:        rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+
+  /* Accent — Indigo */
+  --color-accent:       #6366f1;
+  --color-accent-bright:#818cf8;
+  --color-accent-dim:   rgba(99, 102, 241, 0.15);
+  --color-accent-ring:  rgba(99, 102, 241, 0.30);
+  --color-accent-glow:  rgba(99, 102, 241, 0.40);
+
+  /* Text — zinc */
+  --color-text-primary:   #fafafa; /* zinc-50  */
+  --color-text-secondary: #a1a1aa; /* zinc-400 */
+  --color-text-muted:     #52525b; /* zinc-600 */
+  --color-text-accent:    #818cf8;
+
+  /* Status */
+  --color-success:      #22c55e;
+  --color-success-dim:  rgba(34, 197, 94, 0.15);
+  --color-success-ring: rgba(34, 197, 94, 0.28);
+
+  --color-error:      #ef4444;
+  --color-error-dim:  rgba(239, 68, 68, 0.12);
+  --color-error-ring: rgba(239, 68, 68, 0.26);
+
+  --color-warning:      #f59e0b;
+  --color-warning-dim:  rgba(245, 158, 11, 0.12);
+  --color-warning-ring: rgba(245, 158, 11, 0.26);
+
+  --color-running:     #818cf8;
+  --color-running-dim: rgba(129, 140, 248, 0.15);
+
+  /* Fonts — Geist (Vercel's developer-tool typeface), self-hosted & variable.
+   * Sans: geometric grotesk tuned for UI legibility. Mono: versions / IDs / paths. */
+  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Edge-highlight for the "liquid glass" light-catch on top edges */
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Light theme ────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg-base:     #f8fafc;  /* slate-50   */
+  --color-bg-surface:  #f1f5f9;  /* slate-100  */
+  --color-bg-elevated: #ffffff;  /* white      */
+  --color-bg-overlay:  rgba(248, 250, 252, 0.96);
+  --color-bg-input:    #ffffff;
+
+  --color-border:        rgba(15, 23, 42, 0.10);
+  --color-border-strong: rgba(15, 23, 42, 0.20);
+  --color-border-subtle: rgba(15, 23, 42, 0.05);
+
+  --color-accent:       #4f46e5; /* indigo-600 */
+  --color-accent-bright:#6366f1;
+  --color-accent-dim:   rgba(79, 70, 229, 0.10);
+  --color-accent-ring:  rgba(79, 70, 229, 0.25);
+  --color-accent-glow:  rgba(79, 70, 229, 0.20);
+
+  --color-text-primary:   #0f172a; /* slate-900 */
+  --color-text-secondary: #475569; /* slate-600 */
+  --color-text-muted:     #94a3b8; /* slate-400 */
+  --color-text-accent:    #4f46e5;
+
+  --color-success:      #16a34a;
+  --color-success-dim:  rgba(22, 163, 74, 0.10);
+  --color-success-ring: rgba(22, 163, 74, 0.22);
+
+  --color-error:      #dc2626;
+  --color-error-dim:  rgba(220, 38, 38, 0.08);
+  --color-error-ring: rgba(220, 38, 38, 0.20);
+
+  --color-warning:      #d97706;
+  --color-warning-dim:  rgba(217, 119, 6, 0.10);
+  --color-warning-ring: rgba(217, 119, 6, 0.22);
+
+  --color-running:     #6366f1;
+  --color-running-dim: rgba(99, 102, 241, 0.10);
+
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+}
+
+/* ─── Reset ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root {
+  height: 100%; margin: 0; padding: 0;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.006em;                 /* Geist reads best very slightly tightened */
+  font-feature-settings: 'liga' 1, 'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Mono contexts (versions, build IDs, bundle IDs, paths): tabular figures so
+ * digits line up in columns, plus zero disambiguation. */
+.font-mono, code, kbd, samp, pre {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  letter-spacing: 0;
+}
+
+/* Big numeric display (stat values) — tabular so they never jitter on update. */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+h1, h2, h3, h4 { letter-spacing: -0.017em; }  /* tighter optical tracking on headings */
+
+/* ─── Layered surface classes ("liquid glass") ───── */
+/* Dark: near-opaque zinc surfaces with a soft top-edge light-catch and a
+ * gentle vertical gradient for dimensionality — depth without muddiness.     */
+.glass-xs {
+  background: #1a1a1d;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.glass-sm {
+  background: linear-gradient(180deg, #2a2a2f 0%, #232327 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.glass-md {
+  background: linear-gradient(180deg, #242428 0%, #1c1c20 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+.glass-lg {
+  background: linear-gradient(180deg, #1f1f23 0%, #161619 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 16px 40px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.glass-panel {
+  background: linear-gradient(180deg, #1a1a1d 0%, #161619 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: -14px 0 44px -18px rgba(0, 0, 0, 0.55);
+}
+.glass-sidebar {
+  background: linear-gradient(180deg, #171719 0%, #141416 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+.glass-accent {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.17) 0%, rgba(99, 102, 241, 0.09) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Translucent "real glass" surface — sits over the ambient blobs, so the
+ * backdrop blur genuinely lenses the background. Tint + edge keep text crisp. */
+.glass-surface {
+  background: linear-gradient(180deg, rgba(30, 30, 34, 0.62) 0%, rgba(20, 20, 23, 0.55) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 44px -18px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+}
+
+/* ─── Light overrides ────────────────────────────── */
+/* Crisp white cards, a white top-edge highlight, and soft slate shadows for
+ * legible depth — never the "grey mush" that kills glass in light mode.       */
+[data-theme="light"] .glass-xs {
+  background: #f4f6fa;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+[data-theme="light"] .glass-sm {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), inset 0 1px 0 #ffffff;
+}
+[data-theme="light"] .glass-md {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  box-shadow: 0 6px 18px -8px rgba(15, 23, 42, 0.14), inset 0 1px 0 #ffffff;
+}
+[data-theme="light"] .glass-lg {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 16px 40px -14px rgba(15, 23, 42, 0.18), inset 0 1px 0 #ffffff;
+}
+[data-theme="light"] .glass-panel {
+  background: #ffffff;
+  border-left: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: -14px 0 44px -20px rgba(15, 23, 42, 0.16);
+}
+[data-theme="light"] .glass-sidebar {
+  background: #f6f8fb;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: none;
+}
+[data-theme="light"] .glass-accent {
+  background: linear-gradient(180deg, rgba(79, 70, 229, 0.12) 0%, rgba(79, 70, 229, 0.06) 100%);
+  border: 1px solid var(--color-accent-ring);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+[data-theme="light"] .glass-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(248, 250, 252, 0.66) 100%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 12px 44px -20px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(28px) saturate(1.3);
+  -webkit-backdrop-filter: blur(28px) saturate(1.3);
+}
+
+/* ─── Drag regions ───────────────────────────────── */
+.app-drag    { -webkit-app-region: drag; }
+.app-no-drag { -webkit-app-region: no-drag; }
+
+/* ─── Glow helpers ───────────────────────────────── */
+.glow-accent { box-shadow: 0 0 20px var(--color-accent-glow); }
+.glow-sm     { box-shadow: 0 0 10px rgba(99, 102, 241, 0.28); }
+
+[data-theme="light"] .glow-accent { box-shadow: 0 0 14px rgba(79, 70, 229, 0.22); }
+[data-theme="light"] .glow-sm     { box-shadow: 0 0 8px  rgba(79, 70, 229, 0.16); }
+
+/* ─── Scrollbars ─────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.32); }
+[data-theme="light"] ::-webkit-scrollbar-thumb       { background: rgba(15, 23, 42, 0.14); }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.26); }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── View Transition ────────────────────────────── */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 9999; }
+::view-transition-old(root) { z-index: -1; }
+
+/* ─── Animations ─────────────────────────────────── */
+@keyframes shimmer-wave {
+  0%   { transform: translateX(-100%) skewX(-12deg); }
+  100% { transform: translateX(200%)  skewX(-12deg); }
+}
+@keyframes liquid-shimmer {
+  0%   { transform: translateX(-120%) rotate(-8deg); opacity: 0; }
+  10%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateX(120%)  rotate(-8deg); opacity: 0; }
+}
+@keyframes glow-breath {
+  0%, 100% { box-shadow: 0 0 8px  rgba(99, 102, 241, 0.24); }
+  50%       { box-shadow: 0 0 24px rgba(99, 102, 241, 0.55); }
+}
+.glow-pulse { animation: glow-breath 2.4s ease-in-out infinite; }
+
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+.float { animation: float-subtle 3.2s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+.pulse { animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+.animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+@keyframes skeleton {
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+.shimmer-block {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.05) 25%,
+    rgba(148, 163, 184, 0.10) 50%,
+    rgba(148, 163, 184, 0.05) 75%
+  );
+  background-size: 400px 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+[data-theme="light"] .shimmer-block {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.04) 25%,
+    rgba(15, 23, 42, 0.08) 50%,
+    rgba(15, 23, 42, 0.04) 75%
+  );
+  background-size: 400px 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

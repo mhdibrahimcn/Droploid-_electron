@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Droploid Studio</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' file: data:;"
+    />
+    <style>
+      /* Minimal pre-React styles — prevent flash */
+      :root { --pre-bg: #09090b; }
+      [data-theme="light"] { --pre-bg: #f8fafc; }
+      html, body { margin: 0; overflow: hidden; background: var(--pre-bg); }
+    </style>
+    <!-- Apply stored theme BEFORE React renders to prevent flash -->
+    <script>
+      (function () {
+        var t = localStorage.getItem('droploid_theme')
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.dataset.theme = t
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
