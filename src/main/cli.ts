@@ -297,18 +297,32 @@ async function cmdSetup(): Promise<never> {
     orgName = await ask('Profile / organisation name')
     if (!orgName) { rl.close(); err('setup: name required'); return done(1, false, {}) }
 
-    out(`\n  ${C.bold}🍎 iOS — App Store Connect${C.reset} ${C.dim}(Enter to skip iOS)${C.reset}`)
-    out(`  ${C.dim}Where: appstoreconnect.apple.com ▸ Users and Access ▸ Integrations ▸ App Store Connect API${C.reset}`)
-    out(`  ${C.dim}Issuer ID sits above the keys table · Key ID is next to your key · download the .p8 once (can't re-download)${C.reset}`)
-    const iosKeyID = await ask('Key ID')
-    const iosIssuerID = iosKeyID ? await ask('Issuer ID (UUID)') : ''
-    const iosTeamID = iosKeyID ? await ask('Apple Team ID (optional)') : ''
-    const iosP8Path = iosKeyID ? (await askPath('Path to .p8 private key', false)) ?? '' : ''
+    out('\n  Which platform credentials to add?')
+    out('  1) iOS only  (App Store / TestFlight)')
+    out('  2) Android only  (Google Play)')
+    out(`  3) Both\n`)
+    const plat = await ask('Choose', '3')
+    const wantIOS = plat === '1' || plat === '3'
+    const wantAndroid = plat === '2' || plat === '3'
 
-    out(`\n  ${C.bold}🤖 Android — Play Store${C.reset} ${C.dim}(Enter to skip Android)${C.reset}`)
-    out(`  ${C.dim}Where: console.cloud.google.com ▸ IAM & Admin ▸ Service Accounts ▸ (your account) ▸ Keys ▸ Add key ▸ JSON${C.reset}`)
-    out(`  ${C.dim}Then Play Console ▸ Users and permissions / API access ▸ grant that service-account email (Admin or Release manager)${C.reset}`)
-    const androidJsonPath = (await askPath('Path to service-account .json', false)) ?? ''
+    let iosKeyID = '', iosIssuerID = '', iosTeamID = '', iosP8Path = ''
+    if (wantIOS) {
+      out(`\n  ${C.bold}🍎 iOS — App Store Connect${C.reset}`)
+      out(`  ${C.dim}Where: appstoreconnect.apple.com ▸ Users and Access ▸ Integrations ▸ App Store Connect API${C.reset}`)
+      out(`  ${C.dim}Issuer ID sits above the keys table · Key ID is next to your key · download the .p8 once (can't re-download)${C.reset}`)
+      iosKeyID = await ask('Key ID')
+      iosIssuerID = iosKeyID ? await ask('Issuer ID (UUID)') : ''
+      iosTeamID = iosKeyID ? await ask('Apple Team ID (optional)') : ''
+      iosP8Path = iosKeyID ? (await askPath('Path to .p8 private key', false)) ?? '' : ''
+    }
+
+    let androidJsonPath = ''
+    if (wantAndroid) {
+      out(`\n  ${C.bold}🤖 Android — Play Store${C.reset}`)
+      out(`  ${C.dim}Where: console.cloud.google.com ▸ IAM & Admin ▸ Service Accounts ▸ (your account) ▸ Keys ▸ Add key ▸ JSON${C.reset}`)
+      out(`  ${C.dim}Then Play Console ▸ Users and permissions / API access ▸ grant that service-account email (Admin or Release manager)${C.reset}`)
+      androidJsonPath = (await askPath('Path to service-account .json', false)) ?? ''
+    }
 
     orgId = randomUUID()
     if (iosKeyID) await setCredential(orgId, 'ios_key_id', iosKeyID)

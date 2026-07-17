@@ -54,6 +54,14 @@ cd Droploid-_electron && npm ci && npm run build && ./install.sh
 
 ## Quickstart
 
+**Easiest — guided, no flags:**
+
+```bash
+droploid setup     # pick iOS / Android / both, paste creds (it tells you where to get them), link an app
+```
+
+Or drive it directly:
+
 ```bash
 droploid tools --json          # check toolchain: flutter, fastlane, xcode, cocoapods…
 droploid config-org --name "Acme" \
