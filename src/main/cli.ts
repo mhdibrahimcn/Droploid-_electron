@@ -173,6 +173,15 @@ DEPLOY OPTIONS
   --notes "<text>"             Release notes
   --shorebird                  Build a patchable Shorebird release
 
+WHAT --track production ACTUALLY DOES
+  Android → publishes to the Play production track (add --rollout 0.1 for a staged %).
+            Play review is automated/fast — effectively live in minutes.
+  iOS     → upload only reaches TestFlight. Going live on the App Store needs a
+            separate submission + Apple review (days). droploid uploads the binary;
+            it does NOT auto-submit for review.
+  No auto-promote timer exists — the App Store gates iOS on human review, so a
+  "wait N minutes then promote" flow can't make iOS live on a timer.
+
 --json on any command prints a machine-readable result to stdout (for AI agents).`
 
 // Set App Store "What's New" / Promotional Text via the ASC API — no build, no fastlane.
