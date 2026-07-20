@@ -84,17 +84,39 @@ function resolveApp(p: Parsed): LinkedApp | undefined {
 // Drop a droploid.yaml marker in the project so the repo shows which app it's linked to.
 // Non-fatal: a read-only dir shouldn't fail the link. Safe to commit.
 function writeLinkFile(app: LinkedApp): void {
-  const yaml = [
+  // Preserve any store text the user already filled in on a re-link.
+  const prev = readLinkFile(app.dirPath)
+  const q = (s: string): string => `"${s.replace(/"/g, '\\"')}"`
+  const lines: (string | null)[] = [
     '# Droploid — this project is linked to a Droploid app. Safe to commit.',
     `app: ${app.name}`,
     `id: ${app.id}`,
     `org: ${app.organisationId}`,
-    app.bundleID ? `bundleId: ${app.bundleID}` : '',
-    app.packageName ? `packageName: ${app.packageName}` : '',
+    app.bundleID ? `bundleId: ${app.bundleID}` : null,
+    app.packageName ? `packageName: ${app.packageName}` : null,
     `projectType: ${app.projectType}`,
-    `linkedAt: ${app.linkedAt}`
-  ].filter(Boolean).join('\n') + '\n'
+    `linkedAt: ${app.linkedAt}`,
+    '',
+    '# Default iOS App Store text. Fill these in — `droploid whatsnew`/`promo` use them',
+    '# when you pass no text; a text argument overrides. Single line only.',
+    `whatsNew: ${q(prev.whatsNew ?? '')}`,
+    `promotionalText: ${q(prev.promotionalText ?? '')}`
+  ]
+  const yaml = lines.filter((l) => l !== null).join('\n') + '\n'
   try { writeFileSync(join(resolve(app.dirPath), 'droploid.yaml'), yaml) } catch { /* non-fatal */ }
+}
+// Parse droploid.yaml into a flat key→value map (single-line values, quotes stripped).
+function readLinkFile(dir: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    const f = join(resolve(dir), 'droploid.yaml')
+    if (!existsSync(f)) return out
+    for (const line of readFileSync(f, 'utf8').split('\n')) {
+      const m = line.match(/^([A-Za-z]+):\s*(.*)$/)
+      if (m) out[m[1]] = m[2].trim().replace(/^"|"$/g, '').replace(/\\"/g, '"')
+    }
+  } catch { /* ignore */ }
+  return out
 }
 function findOrg(ref: string): Organisation | undefined {
   const orgs = store.get('organisations', [])
@@ -131,8 +153,8 @@ COMMANDS
   preflight <app>                      Run pre-deploy checks
   deploy <app> [options]               Build & upload
   patch <app>                          Shorebird OTA patch (no store upload)
-  whatsnew [app] "<text>"              Set iOS App Store "What's New" (ASC API, no build)
-  promo [app] "<text>"                 Set iOS App Store Promotional Text (no build/review)
+  whatsnew [app] ["<text>"]            Set iOS "What's New" (text or droploid.yaml default)
+  promo [app] ["<text>"]               Set iOS Promotional Text (text or droploid.yaml default)
   history <app>                        Recent build runs
 
   <app> = app id or name (or --app <id|name>) — omit it to auto-detect from the current folder
@@ -159,9 +181,15 @@ async function cmdStoreText(p: Parsed, json: boolean, field: 'whatsNew' | 'promo
   const nice = field === 'whatsNew' ? "What's New" : 'Promotional Text'
   const appRec = resolveApp(p)
   if (!appRec) { err(`${label}: no app — run inside a linked folder, or \`droploid ${label} <app> "<text>"\``); return done(1, json, { error: 'app_not_found' }) }
-  // text = --text flag, else the last positional (app ref, if any, is the first)
-  const text = str(p.flags.text) ?? (p._.length >= 2 ? p._[1] : p._[0])
-  if (text === undefined) { err(`${label}: text required — \`droploid ${label} "<text>"\``); return done(1, json, { error: 'text_required' }) }
+  // Override text = --text/--<label> flag, or a positional that isn't the app ref.
+  // No override → fall back to the default stored in the project's droploid.yaml.
+  const positional = p._.filter((t) => t !== appRec.name && t !== appRec.id)
+  const override = str(p.flags.text) ?? str(p.flags[label]) ?? positional[positional.length - 1]
+  const text = override ?? readLinkFile(appRec.dirPath)[field]
+  if (!text) {
+    err(`${label}: no text — pass "<text>" or set ${field} in droploid.yaml`)
+    return done(1, json, { error: 'text_required' })
+  }
   if (!appRec.bundleID) { err(`${label}: no iOS bundle id on ${appRec.name} — re-link the app`); return done(1, json, { error: 'no_bundle_id' }) }
   const max = field === 'promotionalText' ? 170 : 4000
   if (text.length > max) { err(`${label}: too long (${text.length}/${max} chars)`); return done(1, json, { error: 'too_long', max }) }
