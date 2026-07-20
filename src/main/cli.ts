@@ -3,9 +3,9 @@
 // Convention: human/log output → stderr, machine result → stdout. `--json` makes stdout parseable
 // for AI agents. Exits the process itself (app.exit) with 0=ok, 1=error/failed.
 import { randomUUID } from 'crypto'
-import { existsSync } from 'fs'
+import { existsSync, writeFileSync, readFileSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { store } from './services/store'
 import { setCredential, deleteOrgCredentials } from './services/keychain'
 import { detect } from './services/projectDetector'
@@ -59,6 +59,16 @@ function findApp(ref: string): LinkedApp | undefined {
 function findAppByCwd(): LinkedApp | undefined {
   const cwd = process.cwd()
   const apps = store.get('apps', [])
+  // 1) droploid.yaml marker in the current folder → match by id (survives moves / relative links)
+  try {
+    const f = join(cwd, 'droploid.yaml')
+    if (existsSync(f)) {
+      const id = readFileSync(f, 'utf8').match(/^id:\s*(\S+)/m)?.[1]
+      const byId = id && apps.find((a) => a.id === id)
+      if (byId) return byId
+    }
+  } catch { /* ignore unreadable marker */ }
+  // 2) fall back to dirPath: exact folder, else nearest linked ancestor
   return apps.find((a) => a.dirPath === cwd)
     ?? apps.filter((a) => cwd.startsWith(a.dirPath + '/')).sort((a, b) => b.dirPath.length - a.dirPath.length)[0]
 }
@@ -66,6 +76,21 @@ function findAppByCwd(): LinkedApp | undefined {
 function resolveApp(p: Parsed): LinkedApp | undefined {
   const ref = appRef(p)
   return ref ? findApp(ref) : findAppByCwd()
+}
+// Drop a droploid.yaml marker in the project so the repo shows which app it's linked to.
+// Non-fatal: a read-only dir shouldn't fail the link. Safe to commit.
+function writeLinkFile(app: LinkedApp): void {
+  const yaml = [
+    '# Droploid — this project is linked to a Droploid app. Safe to commit.',
+    `app: ${app.name}`,
+    `id: ${app.id}`,
+    `org: ${app.organisationId}`,
+    app.bundleID ? `bundleId: ${app.bundleID}` : '',
+    app.packageName ? `packageName: ${app.packageName}` : '',
+    `projectType: ${app.projectType}`,
+    `linkedAt: ${app.linkedAt}`
+  ].filter(Boolean).join('\n') + '\n'
+  try { writeFileSync(join(resolve(app.dirPath), 'droploid.yaml'), yaml) } catch { /* non-fatal */ }
 }
 function findOrg(ref: string): Organisation | undefined {
   const orgs = store.get('organisations', [])
@@ -234,6 +259,7 @@ function cmdLink(p: Parsed, json: boolean): never {
     linkedAt: new Date().toISOString()
   }
   store.set('apps', [...store.get('apps', []), appRec])
+  writeLinkFile(appRec)
   err(`✓ Linked ${appRec.name} (${appRec.projectType}) v${appRec.currentVersion}\n  id: ${appRec.id}`)
   return done(0, json, appRec)
 }
@@ -438,7 +464,8 @@ async function cmdSetup(): Promise<never> {
           linkedAt: new Date().toISOString()
         }
         store.set('apps', [...store.get('apps', []), appRec])
-        out(`\n  ${C.green}✓ Linked ${appRec.name}${C.reset}  ${meta.projectType} v${meta.version}  ${C.dim}(${appRec.id})${C.reset}`)
+        writeLinkFile(appRec)
+        out(`\n  ${C.green}✓ Linked ${appRec.name}${C.reset}  ${meta.projectType} v${meta.version}  ${C.dim}(${appRec.id})  wrote droploid.yaml${C.reset}`)
         out(`\n  ${C.bold}Next:${C.reset}  droploid deploy "${appRec.name}"`)
       }
     }
