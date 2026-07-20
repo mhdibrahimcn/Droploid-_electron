@@ -7,7 +7,8 @@ import { existsSync, writeFileSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 import { store } from './services/store'
-import { setCredential, deleteOrgCredentials } from './services/keychain'
+import { setCredential, getCredential, deleteOrgCredentials } from './services/keychain'
+import { setAppStoreText } from './services/appStoreConnect'
 import { detect } from './services/projectDetector'
 import { getInitialCheckpoints, startBuild, startShorebirdPatch } from './services/buildEngine'
 import { runPreflight } from './services/preflightChecker'
@@ -130,6 +131,8 @@ COMMANDS
   preflight <app>                      Run pre-deploy checks
   deploy <app> [options]               Build & upload
   patch <app>                          Shorebird OTA patch (no store upload)
+  whatsnew [app] "<text>"              Set iOS App Store "What's New" (ASC API, no build)
+  promo [app] "<text>"                 Set iOS App Store Promotional Text (no build/review)
   history <app>                        Recent build runs
 
   <app> = app id or name (or --app <id|name>) — omit it to auto-detect from the current folder
@@ -149,6 +152,37 @@ DEPLOY OPTIONS
   --shorebird                  Build a patchable Shorebird release
 
 --json on any command prints a machine-readable result to stdout (for AI agents).`
+
+// Set App Store "What's New" / Promotional Text via the ASC API — no build, no fastlane.
+async function cmdStoreText(p: Parsed, json: boolean, field: 'whatsNew' | 'promotionalText'): Promise<never> {
+  const label = field === 'whatsNew' ? 'whatsnew' : 'promo'
+  const nice = field === 'whatsNew' ? "What's New" : 'Promotional Text'
+  const appRec = resolveApp(p)
+  if (!appRec) { err(`${label}: no app — run inside a linked folder, or \`droploid ${label} <app> "<text>"\``); return done(1, json, { error: 'app_not_found' }) }
+  // text = --text flag, else the last positional (app ref, if any, is the first)
+  const text = str(p.flags.text) ?? (p._.length >= 2 ? p._[1] : p._[0])
+  if (text === undefined) { err(`${label}: text required — \`droploid ${label} "<text>"\``); return done(1, json, { error: 'text_required' }) }
+  if (!appRec.bundleID) { err(`${label}: no iOS bundle id on ${appRec.name} — re-link the app`); return done(1, json, { error: 'no_bundle_id' }) }
+  const max = field === 'promotionalText' ? 170 : 4000
+  if (text.length > max) { err(`${label}: too long (${text.length}/${max} chars)`); return done(1, json, { error: 'too_long', max }) }
+
+  const keyId = await getCredential(appRec.organisationId, 'ios_key_id')
+  const issuerId = await getCredential(appRec.organisationId, 'ios_issuer_id')
+  const p8Path = await getCredential(appRec.organisationId, 'ios_p8_path')
+  if (!keyId || !issuerId || !p8Path) { err(`${label}: this profile has no iOS App Store Connect credentials`); return done(1, json, { error: 'missing_creds' }) }
+
+  const opts: Parameters<typeof setAppStoreText>[0] = { keyId, issuerId, p8Path, bundleId: appRec.bundleID, locale: str(p.flags.locale) }
+  if (field === 'whatsNew') opts.whatsNew = text
+  else opts.promotionalText = text
+  try {
+    const r = await setAppStoreText(opts)
+    err(`✓ Set ${nice} on ${appRec.name} v${r.versionString} (${r.locale})`)
+    return done(0, json, { app: appRec.name, ...r })
+  } catch (e) {
+    err(`${label}: ${e instanceof Error ? e.message : String(e)}`)
+    return done(1, json, { error: 'asc_failed', message: e instanceof Error ? e.message : String(e) })
+  }
+}
 
 async function cmdDeploy(p: Parsed, json: boolean): Promise<never> {
   const appRec = resolveApp(p)
@@ -535,6 +569,8 @@ export async function runCli(processArgv: string[]): Promise<void> {
         return done(0, json, runs)
       }
       case 'init': case 'setup': return await cmdSetup()  // 'setup' kept as silent alias
+      case 'promo': return await cmdStoreText(p, json, 'promotionalText')
+      case 'whatsnew': return await cmdStoreText(p, json, 'whatsNew')
       case 'link': return cmdLink(p, json)
       case 'config-org': return await cmdConfigOrg(p, json)
       case 'preflight': return await cmdPreflight(p, json)
