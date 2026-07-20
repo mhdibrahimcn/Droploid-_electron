@@ -54,6 +54,19 @@ function findApp(ref: string): LinkedApp | undefined {
   const apps = store.get('apps', [])
   return apps.find((a) => a.id === ref) ?? apps.find((a) => a.name === ref)
 }
+// The linked app whose folder we're standing in — so `droploid deploy` needs no app name
+// when run from inside the project. Exact dir first, else the nearest linked ancestor.
+function findAppByCwd(): LinkedApp | undefined {
+  const cwd = process.cwd()
+  const apps = store.get('apps', [])
+  return apps.find((a) => a.dirPath === cwd)
+    ?? apps.filter((a) => cwd.startsWith(a.dirPath + '/')).sort((a, b) => b.dirPath.length - a.dirPath.length)[0]
+}
+// Resolve the target app: explicit --app/positional ref, else auto-detect from the current folder.
+function resolveApp(p: Parsed): LinkedApp | undefined {
+  const ref = appRef(p)
+  return ref ? findApp(ref) : findAppByCwd()
+}
 function findOrg(ref: string): Organisation | undefined {
   const orgs = store.get('organisations', [])
   return orgs.find((o) => o.id === ref) ?? orgs.find((o) => o.name === ref)
@@ -91,7 +104,7 @@ COMMANDS
   patch <app>                          Shorebird OTA patch (no store upload)
   history <app>                        Recent build runs
 
-  <app> = app id or name (or pass --app <id|name>)
+  <app> = app id or name (or --app <id|name>) — omit it to auto-detect from the current folder
 
 CREDS (config-org)
   --ios-key-id <k> --ios-issuer-id <i> --ios-team-id <t> --ios-p8 <path> --android-json <path>
@@ -110,10 +123,8 @@ DEPLOY OPTIONS
 --json on any command prints a machine-readable result to stdout (for AI agents).`
 
 async function cmdDeploy(p: Parsed, json: boolean): Promise<never> {
-  const ref = appRef(p)
-  if (!ref) { err('deploy: app required — `droploid deploy <id|name>` or --app'); return done(1, json, { error: 'app_required' }) }
-  const appRec = findApp(ref)
-  if (!appRec) { err(`deploy: app not found: ${ref}`); return done(1, json, { error: 'app_not_found' }) }
+  const appRec = resolveApp(p)
+  if (!appRec) { err('deploy: no app — run inside a linked folder, or `droploid deploy <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
 
   const platform = (str(p.flags.platform) ?? 'both') as BuildPlatform
   const track = str(p.flags.track) ?? 'internal'
@@ -159,9 +170,8 @@ async function cmdDeploy(p: Parsed, json: boolean): Promise<never> {
 }
 
 async function cmdPatch(p: Parsed, json: boolean): Promise<never> {
-  const ref = appRef(p)
-  const appRec = ref ? findApp(ref) : undefined
-  if (!appRec) { err('patch: app required — `droploid patch <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
+  const appRec = resolveApp(p)
+  if (!appRec) { err('patch: no app — run inside a linked folder, or `droploid patch <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
   const platform = (str(p.flags.platform) ?? 'both') as BuildPlatform
   const res = await startShorebirdPatch({
     runId: randomUUID(), appId: appRec.id, platform,
@@ -229,9 +239,8 @@ function cmdLink(p: Parsed, json: boolean): never {
 }
 
 async function cmdPreflight(p: Parsed, json: boolean): Promise<never> {
-  const ref = appRef(p)
-  const appRec = ref ? findApp(ref) : undefined
-  if (!appRec) { err('preflight: app required — `droploid preflight <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
+  const appRec = resolveApp(p)
+  if (!appRec) { err('preflight: no app — run inside a linked folder, or `droploid preflight <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
   const platform = (str(p.flags.platform) ?? 'both') as BuildPlatform
   const checks = await runPreflight(appRec.id, appRec.organisationId, platform)
   checks.forEach((c) => err(`  ${c.passed ? '✓' : c.isBlocker ? '✗' : '⚠'} ${c.label}${c.message ? ` — ${c.message}` : ''}`))
@@ -487,9 +496,8 @@ export async function runCli(processArgv: string[]): Promise<void> {
         return done(t.some((s) => s.state !== 'found') ? 1 : 0, json, t)
       }
       case 'history': {
-        const ref = appRef(p)
-        const appRec = ref ? findApp(ref) : undefined
-        if (!appRec) { err('history: app required — `droploid history <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
+        const appRec = resolveApp(p)
+        if (!appRec) { err('history: no app — run inside a linked folder, or `droploid history <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
         const runs = store.get('build_runs', []).filter((r) => r.appId === appRec.id)
           .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()).slice(0, 20)
         runs.forEach((r) => err(`  ${r.result.padEnd(9)} ${r.platform.padEnd(7)} v${r.version}  ${r.startedAt}`))
