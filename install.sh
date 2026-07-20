@@ -81,4 +81,4 @@ chmod +x "$BIN/droploid"
 echo "✓ Installed → $BIN/droploid"
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "  Add to PATH:  export PATH=\"$BIN:\$PATH\"" ;; esac
 echo "  Check tools:  droploid tools"
-echo "  Get started:  droploid setup"
+echo "  Get started:  droploid init"

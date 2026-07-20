@@ -66,7 +66,7 @@ USAGE
   droploid --help
 
 COMMANDS
-  setup                                Interactive first-time setup (no flags — just answer prompts)
+  init                                 Interactive first-time setup (no flags — just answer prompts)
   orgs                                 List organisations
   apps [--org <id|name>]               List linked apps
   tools                                Check required toolchain (flutter, fastlane, xcode…)
@@ -84,7 +84,7 @@ CREDS (config-org)
   --ios-key-id <k> --ios-issuer-id <i> --ios-team-id <t> --ios-p8 <path> --android-json <path>
   iOS: App Store Connect ▸ Users and Access ▸ Integrations ▸ App Store Connect API (Issuer ID + Key ID + .p8)
   Android: Google Cloud Console ▸ IAM & Admin ▸ Service Accounts ▸ Keys ▸ Add key ▸ JSON, then grant it in Play Console
-  Tip: run "droploid setup" for a guided, no-flags walkthrough.
+  Tip: run "droploid init" for a guided, no-flags walkthrough.
 
 DEPLOY OPTIONS
   --platform ios|android|both   (default both)
@@ -280,7 +280,7 @@ async function cmdSetup(): Promise<never> {
     }
   }
 
-  banner('🚀 Droploid setup')
+  banner('🚀 Droploid init')
   out('  What do you want to do?')
   out('  1) Create a profile (organisation + signing credentials)')
   out('  2) Link an app to a profile')
@@ -295,7 +295,7 @@ async function cmdSetup(): Promise<never> {
   if (doOrg) {
     banner('🏢 New profile')
     orgName = await ask('Profile / organisation name')
-    if (!orgName) { rl.close(); err('setup: name required'); return done(1, false, {}) }
+    if (!orgName) { rl.close(); err('init: name required'); return done(1, false, {}) }
 
     out('\n  Which platform credentials to add?')
     out('  1) iOS only  (App Store / TestFlight)')
@@ -308,12 +308,25 @@ async function cmdSetup(): Promise<never> {
     let iosKeyID = '', iosIssuerID = '', iosTeamID = '', iosP8Path = ''
     if (wantIOS) {
       out(`\n  ${C.bold}🍎 iOS — App Store Connect${C.reset}`)
-      out(`  ${C.dim}Where: appstoreconnect.apple.com ▸ Users and Access ▸ Integrations ▸ App Store Connect API${C.reset}`)
-      out(`  ${C.dim}Issuer ID sits above the keys table · Key ID is next to your key · download the .p8 once (can't re-download)${C.reset}`)
+      out(`  ${C.dim}Open: appstoreconnect.apple.com ▸ Users and Access ▸ Integrations ▸ App Store Connect API${C.reset}`)
+      out(`  ${C.dim}(Team Keys tab; needs Admin / Account Holder role to see this page)${C.reset}`)
+
+      out(`\n  ${C.dim}Key ID — in the table listing your keys, the "Key ID" column of your key's row.${C.reset}`)
+      out(`  ${C.dim}A ~10-char code like ABC123XYZ9. Not secret; it just names the key.${C.reset}`)
       iosKeyID = await ask('Key ID')
-      iosIssuerID = iosKeyID ? await ask('Issuer ID (UUID)') : ''
-      iosTeamID = iosKeyID ? await ask('Apple Team ID (optional)') : ''
-      iosP8Path = iosKeyID ? (await askPath('Path to .p8 private key', false)) ?? '' : ''
+
+      if (iosKeyID) {
+        out(`\n  ${C.dim}Issuer ID — right above the keys table, labeled "Issuer ID" with a Copy link.${C.reset}`)
+        out(`  ${C.dim}A UUID like 57246542-96fe-1a63-e053-0100000bedd1. One per team — same for every key.${C.reset}`)
+        iosIssuerID = await ask('Issuer ID (UUID)')
+
+        out(`\n  ${C.dim}Apple Team ID — optional. Membership page, top-right, next to your team name (10 chars).${C.reset}`)
+        iosTeamID = await ask('Apple Team ID (optional)')
+
+        out(`\n  ${C.dim}.p8 file — the private key you downloaded when creating the key (AuthKey_<KeyID>.p8).${C.reset}`)
+        out(`  ${C.dim}Apple lets you download it once only; give the path to that saved file.${C.reset}`)
+        iosP8Path = (await askPath('Path to .p8 private key', false)) ?? ''
+      }
     }
 
     let androidJsonPath = ''
@@ -339,15 +352,15 @@ async function cmdSetup(): Promise<never> {
     banner('📱 Link an app')
     if (!orgId) {
       const orgs = store.get('organisations', [])
-      if (!orgs.length) { rl.close(); err('setup: no profiles yet — run setup and choose option 1 or 3'); return done(1, false, {}) }
+      if (!orgs.length) { rl.close(); err('init: no profiles yet — run init and choose option 1 or 3'); return done(1, false, {}) }
       orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
       const pick = await ask('\n  Which profile', '1')
       const org = orgs[Number(pick) - 1] ?? findOrg(pick)
-      if (!org) { rl.close(); err('setup: invalid profile'); return done(1, false, {}) }
+      if (!org) { rl.close(); err('init: invalid profile'); return done(1, false, {}) }
       orgId = org.id; orgName = org.name
     }
     const dir = await askPath('App project folder', true)
-    if (!dir) { rl.close(); err('setup: app folder required'); return done(1, false, {}) }
+    if (!dir) { rl.close(); err('init: app folder required'); return done(1, false, {}) }
     const meta = detect(dir)
     const appRec: LinkedApp = {
       id: randomUUID(), organisationId: orgId, dirPath: dir, name: meta.name,
@@ -407,7 +420,7 @@ export async function runCli(processArgv: string[]): Promise<void> {
         if (!runs.length) err('  (no build history)')
         return done(0, json, runs)
       }
-      case 'setup': return await cmdSetup()
+      case 'init': case 'setup': return await cmdSetup()  // 'setup' kept as silent alias
       case 'link': return cmdLink(p, json)
       case 'config-org': return await cmdConfigOrg(p, json)
       case 'preflight': return await cmdPreflight(p, json)

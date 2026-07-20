@@ -53,7 +53,7 @@ Requires **git** and **Node.js**. iOS builds also need macOS + Xcode.
 **Easiest — guided, no flags:**
 
 ```bash
-droploid setup     # pick iOS / Android / both, paste creds (it tells you where to get them), link an app
+droploid init     # pick iOS / Android / both, paste creds (it tells you where to get them), link an app
 ```
 
 Or drive it directly:
