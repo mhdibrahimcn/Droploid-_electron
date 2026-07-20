@@ -338,6 +338,21 @@ async function cmdSetup(): Promise<never> {
     return { orgId, orgName }
   }
 
+  // Reuse an existing profile or make a new one. No profiles → straight to create.
+  const pickOrCreateProfile = async (): Promise<{ orgId: string; orgName: string } | null> => {
+    const orgs = store.get('organisations', [])
+    if (!orgs.length) return createProfile()
+    out('\n  Choose a profile:')
+    orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
+    const createIdx = orgs.length + 1
+    out(`  ${createIdx}) ${C.dim}Create new profile${C.reset}`)
+    const pick = await ask('\n  Which profile', '1')
+    if (pick === String(createIdx) || /^(new|create)$/i.test(pick)) return createProfile()
+    const org = orgs[Number(pick) - 1] ?? findOrg(pick)
+    if (!org) { err('init: invalid profile'); return null }
+    return { orgId: org.id, orgName: org.name }
+  }
+
   banner('🚀 Droploid init')
   out('  What do you want to do?')
   out('  1) Create a profile (organisation + signing credentials)')
@@ -351,7 +366,8 @@ async function cmdSetup(): Promise<never> {
   let orgName: string | undefined
 
   if (doOrg) {
-    const res = await createProfile()
+    // Reuse an existing profile if there is one; only create when asked.
+    const res = await pickOrCreateProfile()
     if (!res) { rl.close(); return done(1, false, {}) }
     orgId = res.orgId; orgName = res.orgName
   }
@@ -359,29 +375,9 @@ async function cmdSetup(): Promise<never> {
   if (doLink) {
     banner('📱 Link an app')
     if (!orgId) {
-      const orgs = store.get('organisations', [])
-      if (!orgs.length) {
-        // No account yet — create one first, then link into it.
-        out(`  ${C.dim}No profiles yet — let's create one first.${C.reset}`)
-        const res = await createProfile()
-        if (!res) { rl.close(); return done(1, false, {}) }
-        orgId = res.orgId; orgName = res.orgName
-      } else {
-        // Show existing accounts + a "create new" option.
-        orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
-        const createIdx = orgs.length + 1
-        out(`  ${createIdx}) ${C.dim}Create new profile${C.reset}`)
-        const pick = await ask('\n  Which profile', '1')
-        if (pick === String(createIdx) || /^(new|create)$/i.test(pick)) {
-          const res = await createProfile()
-          if (!res) { rl.close(); return done(1, false, {}) }
-          orgId = res.orgId; orgName = res.orgName
-        } else {
-          const org = orgs[Number(pick) - 1] ?? findOrg(pick)
-          if (!org) { rl.close(); err('init: invalid profile'); return done(1, false, {}) }
-          orgId = org.id; orgName = org.name
-        }
-      }
+      const res = await pickOrCreateProfile()
+      if (!res) { rl.close(); return done(1, false, {}) }
+      orgId = res.orgId; orgName = res.orgName
     }
     const dir = await askPath('App project folder', true)
     if (!dir) { rl.close(); err('init: app folder required'); return done(1, false, {}) }
