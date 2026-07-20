@@ -7,7 +7,7 @@ import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { store } from './services/store'
-import { setCredential } from './services/keychain'
+import { setCredential, deleteOrgCredentials } from './services/keychain'
 import { detect } from './services/projectDetector'
 import { getInitialCheckpoints, startBuild, startShorebirdPatch } from './services/buildEngine'
 import { runPreflight } from './services/preflightChecker'
@@ -58,6 +58,18 @@ function findOrg(ref: string): Organisation | undefined {
   const orgs = store.get('organisations', [])
   return orgs.find((o) => o.id === ref) ?? orgs.find((o) => o.name === ref)
 }
+// Cascade-delete a profile: its linked apps, its stored credentials, then the org itself.
+async function deleteProfileCascade(orgId: string): Promise<{ name: string; appsRemoved: number } | null> {
+  const orgs = store.get('organisations', [])
+  const org = orgs.find((o) => o.id === orgId)
+  if (!org) return null
+  const apps = store.get('apps', [])
+  const appsRemoved = apps.filter((a) => a.organisationId === orgId).length
+  store.set('apps', apps.filter((a) => a.organisationId !== orgId))
+  store.set('organisations', orgs.filter((o) => o.id !== orgId))
+  await deleteOrgCredentials(orgId)
+  return { name: org.name, appsRemoved }
+}
 
 const HELP = `droploid — deploy Flutter & native iOS/Android apps to the App Store & Play Store
 
@@ -68,6 +80,7 @@ USAGE
 COMMANDS
   init                                 Interactive first-time setup (no flags — just answer prompts)
   orgs                                 List organisations
+  rm-org <id|name> [--yes]             Delete a profile + its apps & credentials
   apps [--org <id|name>]               List linked apps
   tools                                Check required toolchain (flutter, fastlane, xcode…)
   link <dir> --org <id|name>           Detect & link an app project
@@ -338,19 +351,37 @@ async function cmdSetup(): Promise<never> {
     return { orgId, orgName }
   }
 
-  // Reuse an existing profile or make a new one. No profiles → straight to create.
+  // Reuse an existing profile, make a new one, or delete one. No profiles → straight to create.
   const pickOrCreateProfile = async (): Promise<{ orgId: string; orgName: string } | null> => {
-    const orgs = store.get('organisations', [])
-    if (!orgs.length) return createProfile()
-    out('\n  Choose a profile:')
-    orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
-    const createIdx = orgs.length + 1
-    out(`  ${createIdx}) ${C.dim}Create new profile${C.reset}`)
-    const pick = await ask('\n  Which profile', '1')
-    if (pick === String(createIdx) || /^(new|create)$/i.test(pick)) return createProfile()
-    const org = orgs[Number(pick) - 1] ?? findOrg(pick)
-    if (!org) { err('init: invalid profile'); return null }
-    return { orgId: org.id, orgName: org.name }
+    for (;;) {
+      const orgs = store.get('organisations', [])
+      if (!orgs.length) return createProfile()
+      out('\n  Choose a profile:')
+      orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
+      const createIdx = orgs.length + 1
+      const deleteIdx = orgs.length + 2
+      out(`  ${createIdx}) ${C.dim}Create new profile${C.reset}`)
+      out(`  ${deleteIdx}) ${C.dim}Delete a profile${C.reset}`)
+      const pick = await ask('\n  Which profile', '1')
+
+      if (pick === String(createIdx) || /^(new|create)$/i.test(pick)) return createProfile()
+
+      if (pick === String(deleteIdx) || /^(del|delete|rm)$/i.test(pick)) {
+        const which = await ask('  Delete which # (Enter to cancel)')
+        const target = which ? (orgs[Number(which) - 1] ?? findOrg(which)) : undefined
+        if (!target) { out(`  ${C.dim}cancelled${C.reset}`); continue }
+        const linked = store.get('apps', []).filter((a) => a.organisationId === target.id).length
+        const confirm = await ask(`  ${C.yellow}Delete "${target.name}"${linked ? ` and ${linked} linked app(s)` : ''} + credentials? type 'yes'${C.reset}`)
+        if (confirm.toLowerCase() !== 'yes') { out(`  ${C.dim}kept${C.reset}`); continue }
+        const r = await deleteProfileCascade(target.id)
+        out(`  ${C.green}✓ deleted "${r?.name}"${r && r.appsRemoved ? ` (+${r.appsRemoved} app)` : ''}${C.reset}`)
+        continue // re-show the (now shorter) list
+      }
+
+      const org = orgs[Number(pick) - 1] ?? findOrg(pick)
+      if (!org) { err('init: invalid profile'); return null }
+      return { orgId: org.id, orgName: org.name }
+    }
   }
 
   banner('🚀 Droploid init')
@@ -415,6 +446,20 @@ export async function runCli(processArgv: string[]): Promise<void> {
         orgs.forEach((o) => err(`  ${o.name}  (${o.id})`))
         if (!orgs.length) err('  (no organisations — run: droploid config-org --name <name>)')
         return done(0, json, orgs)
+      }
+      case 'rm-org': {
+        const ref = str(p.flags.org) ?? p._[0]
+        const org = ref ? findOrg(ref) : undefined
+        if (!org) { err('rm-org: profile required — `droploid rm-org <id|name>`'); return done(1, json, { error: 'org_not_found' }) }
+        const linked = store.get('apps', []).filter((a) => a.organisationId === org.id).length
+        if (p.flags.yes !== true) {
+          err(`Would delete "${org.name}"${linked ? ` and ${linked} linked app(s)` : ''} + stored credentials.`)
+          err(`Confirm:  droploid rm-org ${ref} --yes`)
+          return done(1, json, { error: 'confirm_required', name: org.name, apps: linked })
+        }
+        const r = await deleteProfileCascade(org.id)
+        err(`✓ deleted "${r?.name}"${r && r.appsRemoved ? ` and ${r.appsRemoved} app(s)` : ''} + credentials`)
+        return done(0, json, { deleted: r?.name, apps: r?.appsRemoved ?? 0 })
       }
       case 'apps': {
         const orgRef = str(p.flags.org)
