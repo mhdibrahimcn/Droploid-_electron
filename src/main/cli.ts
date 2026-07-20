@@ -97,9 +97,9 @@ function writeLinkFile(app: LinkedApp): void {
     `projectType: ${app.projectType}`,
     `linkedAt: ${app.linkedAt}`,
     '',
-    '# Default iOS App Store text. Fill these in — `droploid whatsnew`/`promo` use them',
+    '# Default iOS App Store text. Edit these — `droploid whatsnew`/`promo` use them',
     '# when you pass no text; a text argument overrides. Single line only.',
-    `whatsNew: ${q(prev.whatsNew ?? '')}`,
+    `whatsNew: ${q(prev.whatsNew ?? 'Bug fixes and performance improvements.')}`,
     `promotionalText: ${q(prev.promotionalText ?? '')}`
   ]
   const yaml = lines.filter((l) => l !== null).join('\n') + '\n'
