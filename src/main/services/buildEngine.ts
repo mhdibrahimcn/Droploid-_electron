@@ -11,8 +11,7 @@ import {
   kShorebirdPATH,
   shorebirdAndroidReleaseArgs,
   shorebirdIOSReleaseArgs,
-  runShorebirdPatch,
-  ensureShorebirdConfig
+  runShorebirdPatch
 } from './shorebird'
 import type { BuildPlatform, BumpKind, BuildResult, BuildCheckpoint, LogLine } from '../../shared/types/models'
 
@@ -395,24 +394,6 @@ export async function startBuild(params: {
       const newVersion = bump(app.currentVersion, bumpKind)
       writeToPubspec(app.dirPath, newVersion)
       store.set('apps', apps.map((a) => a.id === appId ? { ...a, currentVersion: newVersion } : a))
-    }
-  }
-
-  // Shorebird needs a shorebird.yaml (holds the app_id). Create the default if it's absent,
-  // so `deploy --shorebird` works on a fresh project without a manual `shorebird init`.
-  if (useShorebird) {
-    const app = store.get('apps', []).find((a) => a.id === appId)
-    if (app) {
-      const logPlatform: LogLine['platform'] = platform === 'android' ? 'android' : 'ios'
-      const emit = (text: string, kind: LogLine['kind'] = 'output'): void =>
-        callbacks.onLogLine({ id: `${Date.now()}`, kind, text, platform: logPlatform })
-      const code = await ensureShorebirdConfig(app.dirPath, (l) => emit(l), active)
-      if (code !== 0 && !active.cancelled) {
-        emit('shorebird init failed — run `shorebird login` once, then retry', 'error')
-        activeBuilds.delete(runId)
-        callbacks.onComplete('failed', 'failed')
-        return
-      }
     }
   }
 
