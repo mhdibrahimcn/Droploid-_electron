@@ -1,5 +1,5 @@
 import { spawn, spawnSync, ChildProcess } from 'child_process'
-import { writeFileSync, unlinkSync, existsSync, mkdirSync, readdirSync } from 'fs'
+import { writeFileSync, unlinkSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir, homedir } from 'os'
 import { kDroploidPATH, kRubyPATH, kArchiveCacheDir } from '../utils/paths'
@@ -412,6 +412,60 @@ export async function startBuild(params: {
 
   activeBuilds.delete(runId)
   callbacks.onComplete(iosResult, androidResult)
+}
+
+// Submit an already-uploaded iOS build for App Store review + auto-release (deploy.sh's
+// `fastlane deliver`). Builds a fastlane API-key JSON from the .p8, skips binary/metadata
+// (nothing to re-upload), and retries — right after upload the build is still processing on
+// Apple's side, so deliver 400s until it's ready. Returns 0 on submit.
+export async function submitIosForReview(params: {
+  keyId: string
+  issuerId: string
+  p8Path: string
+  bundleId: string
+  version: string
+  build: string
+  onLine: (line: string) => void
+  retries?: number
+  retryDelayMs?: number
+}): Promise<number> {
+  const { keyId, issuerId, p8Path, bundleId, version, build, onLine } = params
+  const retries = params.retries ?? 5
+  const retryDelayMs = params.retryDelayMs ?? 120_000
+  let keyJson: string
+  try {
+    const pem = readFileSync(p8Path, 'utf8')
+    keyJson = join(tmpdir(), `droploid_asc_key_${Date.now()}.json`)
+    writeFileSync(keyJson, JSON.stringify({ key_id: keyId, issuer_id: issuerId, key: pem, in_house: false }), 'utf8')
+  } catch (e) { onLine(`submit: cannot read .p8 — ${e instanceof Error ? e.message : String(e)}`); return 1 }
+
+  const args = [
+    'deliver',
+    '--api_key_path', keyJson,
+    '--app_identifier', bundleId,
+    '--platform', 'ios',
+    '--app_version', version,
+    '--build_number', build,
+    '--automatic_release', 'true',
+    '--skip_binary_upload', 'true',
+    '--skip_screenshots', 'true',
+    '--skip_metadata', 'true',
+    '--run_precheck_before_submit', 'false',
+    '--force', 'true'
+  ]
+  const env = { ...process.env, PATH: kDroploidPATH }
+  const active: ActiveBuild = { runId: `submit-${Date.now()}`, children: [], cancelled: false }
+  let code = 1
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    code = await spawnLine('fastlane', args, { env }, onLine, active)
+    if (code === 0) break
+    if (attempt < retries) {
+      onLine(`submit: deliver failed (build likely still processing) — retry in ${Math.round(retryDelayMs / 60_000)} min`)
+      await new Promise((r) => setTimeout(r, retryDelayMs))
+    }
+  }
+  try { unlinkSync(keyJson) } catch { /* ignore */ }
+  return code
 }
 
 // Promote an already-uploaded Android build between Play tracks (deploy.sh option 4).

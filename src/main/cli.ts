@@ -10,7 +10,7 @@ import { store } from './services/store'
 import { setCredential, getCredential, deleteOrgCredentials } from './services/keychain'
 import { setAppStoreText } from './services/appStoreConnect'
 import { detect } from './services/projectDetector'
-import { getInitialCheckpoints, startBuild, startShorebirdPatch, promoteAndroidTrack } from './services/buildEngine'
+import { getInitialCheckpoints, startBuild, startShorebirdPatch, promoteAndroidTrack, submitIosForReview } from './services/buildEngine'
 import { runPreflight } from './services/preflightChecker'
 import { checkAllTools } from './services/toolChecker'
 import { kLogsDir } from './utils/paths'
@@ -173,6 +173,8 @@ DEPLOY OPTIONS
   --rollout <0..1>              Staged production rollout fraction
   --notes "<text>"             Release notes
   --shorebird                  Build a patchable Shorebird release
+  --auto a-60 i-20             After deploy, wait then auto-promote: Android→production,
+                               iOS→submit for review (numbers = minutes). Blocks the terminal.
 
 WHAT --track production ACTUALLY DOES
   Android → publishes to the Play production track (add --rollout 0.1 for a staged %).
@@ -193,6 +195,73 @@ function parseDurationMs(s: string): number | null {
   const unit = (m[2] ?? 'm').toLowerCase()
   const mult = unit === 's' ? 1000 : unit === 'h' ? 3_600_000 : 60_000
   return Math.round(n * mult)
+}
+
+// Parse `--auto a-60 i-20` (also `--auto a-60,i-20` or stray positionals) into per-platform
+// wait durations in ms. a = Android, i = iOS; number defaults to minutes (a-60 = 60 min).
+function parseAutoSpec(p: Parsed): { android?: number; ios?: number } | null {
+  if (p.flags.auto === undefined) return null
+  const tokens: string[] = []
+  if (typeof p.flags.auto === 'string') tokens.push(...p.flags.auto.split(','))
+  tokens.push(...p._)
+  const spec: { android?: number; ios?: number } = {}
+  for (const t of tokens) {
+    const m = t.match(/^([ai])-?(\d+(?:\.\d+)?)(s|m|min|h)?$/i)
+    if (!m) continue
+    const ms = parseDurationMs(m[2] + (m[3] ?? 'm'))
+    if (ms === null) continue
+    if (m[1].toLowerCase() === 'a') spec.android = ms
+    else spec.ios = ms
+  }
+  return (spec.android !== undefined || spec.ios !== undefined) ? spec : null
+}
+
+// After a successful deploy: wait per-platform, then Android → production promote and
+// iOS → submit for review (+ What's New). Mirrors deploy.sh's timed auto-promote pipeline.
+async function runAutoPromote(
+  appRec: LinkedApp, platform: BuildPlatform, rollout: number | undefined,
+  auto: { android?: number; ios?: number }
+): Promise<void> {
+  const fresh = store.get('apps', []).find((a) => a.id === appRec.id) ?? appRec // post-bump version
+  const mins = (ms: number): number => Math.round(ms / 60_000)
+  const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+  const tasks: Promise<void>[] = []
+
+  if ((platform === 'android' || platform === 'both') && auto.android !== undefined && appRec.packageName) {
+    tasks.push((async () => {
+      err(`[auto] Android: waiting ${mins(auto.android!)}m for Play to process, then promote → production`)
+      await sleep(auto.android!)
+      const code = await promoteAndroidTrack({
+        appId: appRec.id, orgId: appRec.organisationId, from: 'internal', to: 'production', rollout,
+        onLine: (l) => err(`[android] ${l}`)
+      })
+      err(code === 0 ? '✓ [auto] Android promoted → production' : '✗ [auto] Android promote failed')
+    })())
+  }
+
+  if ((platform === 'ios' || platform === 'both') && auto.ios !== undefined && appRec.bundleID) {
+    tasks.push((async () => {
+      const keyId = await getCredential(appRec.organisationId, 'ios_key_id')
+      const issuerId = await getCredential(appRec.organisationId, 'ios_issuer_id')
+      const p8Path = await getCredential(appRec.organisationId, 'ios_p8_path')
+      if (!keyId || !issuerId || !p8Path) { err('✗ [auto] iOS: profile has no App Store Connect credentials'); return }
+      err(`[auto] iOS: waiting ${mins(auto.ios!)}m for App Store to process, then submit for review`)
+      await sleep(auto.ios!)
+      const [version, build = ''] = fresh.currentVersion.split('+')
+      const whatsNew = readLinkFile(appRec.dirPath).whatsNew
+      if (whatsNew) {
+        try { await setAppStoreText({ keyId, issuerId, p8Path, bundleId: appRec.bundleID!, whatsNew }); err("✓ [auto] iOS What's New set") }
+        catch (e) { err(`⚠ [auto] iOS What's New: ${e instanceof Error ? e.message : String(e)}`) }
+      }
+      const code = await submitIosForReview({
+        keyId, issuerId, p8Path, bundleId: appRec.bundleID!, version, build, onLine: (l) => err(`[ios] ${l}`)
+      })
+      err(code === 0 ? '✓ [auto] iOS submitted for review (+ auto-release)' : '✗ [auto] iOS submit failed after retries')
+    })())
+  }
+
+  if (!tasks.length) { err('[auto] nothing to promote — check --platform and that credentials/ids exist'); return }
+  await Promise.all(tasks)
 }
 
 // Promote an Android build between Play tracks (internal/beta → production), no rebuild.
@@ -303,6 +372,16 @@ async function cmdDeploy(p: Parsed, json: boolean): Promise<never> {
   })
 
   err(combined === 'success' ? '✓ Deploy complete' : '✗ Deploy failed')
+
+  // --auto a-60 i-20: after a good deploy, wait then auto-promote (Android prod / iOS submit).
+  if (combined === 'success') {
+    const auto = parseAutoSpec(p)
+    if (auto) {
+      err('▶ Auto-promote scheduled — keep this running until it finishes (timers block the terminal).')
+      await runAutoPromote(appRec, platform, rollout, auto)
+    }
+  }
+
   return done(combined === 'success' ? 0 : 1, json, { runId, result: combined })
 }
 
