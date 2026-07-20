@@ -2,7 +2,9 @@
 // flows from deploy.sh. Command builders are kept pure (no spawning) so they're unit-testable;
 // runShorebirdPatch is the only side-effectful export.
 import { spawn, ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
 import { homedir } from 'os'
+import { join } from 'path'
 import { kDroploidPATH } from '../utils/paths'
 import { stripAnsi } from '../utils/processRunner'
 
@@ -61,6 +63,33 @@ export function shorebirdEnv(): NodeJS.ProcessEnv {
 export interface CancelToken {
   cancelled: boolean
   children: ChildProcess[]
+}
+
+// Ensure the project has a shorebird.yaml. It carries the Shorebird app_id, so it can't be
+// faked — `shorebird init --force` creates the remote app and writes the default config.
+// Needs `shorebird login` first; CI=true keeps it from prompting. Resolves 0 if already present
+// or created OK, non-zero on failure (99 if cancelled).
+export function ensureShorebirdConfig(
+  cwd: string,
+  onLine: (line: string) => void,
+  token?: CancelToken
+): Promise<number> {
+  if (existsSync(join(cwd, 'shorebird.yaml'))) return Promise.resolve(0)
+  onLine('shorebird.yaml missing — creating default via `shorebird init --force`')
+  return new Promise((resolve) => {
+    const child = spawn('shorebird', ['init', '--force'], {
+      cwd,
+      env: shorebirdEnv(),
+      stdio: 'pipe',
+      shell: false
+    })
+    token?.children.push(child)
+    const onData = (b: Buffer): void => stripAnsi(b.toString()).split('\n').forEach((l) => l && onLine(l))
+    child.stdout?.on('data', onData)
+    child.stderr?.on('data', onData)
+    child.on('close', (code) => resolve(token?.cancelled ? 99 : code ?? 1))
+    child.on('error', (e) => { onLine(`shorebird init failed: ${e.message}`); resolve(1) })
+  })
 }
 
 // Run an OTA patch, streaming stripped log lines. Resolves with the exit code
