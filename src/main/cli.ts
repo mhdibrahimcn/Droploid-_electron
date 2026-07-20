@@ -153,7 +153,7 @@ COMMANDS
   preflight <app>                      Run pre-deploy checks
   deploy <app> [options]               Build & upload
   patch <app>                          Shorebird OTA patch (no store upload)
-  promote [app] [--from t --to t]      Android: promote Play track internal→production (no rebuild)
+  promote [app] [--from t --to t] [--after 50m]   Android: promote Play track (no rebuild; --after waits first)
   whatsnew [app] ["<text>"]            Set iOS "What's New" (text or droploid.yaml default)
   promo [app] ["<text>"]               Set iOS Promotional Text (text or droploid.yaml default)
   history <app>                        Recent build runs
@@ -185,7 +185,18 @@ WHAT --track production ACTUALLY DOES
 
 --json on any command prints a machine-readable result to stdout (for AI agents).`
 
+// Parse a duration like "50m" / "50" (minutes default) / "2h" / "3000s" → milliseconds.
+function parseDurationMs(s: string): number | null {
+  const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*(s|m|min|h)?$/i)
+  if (!m) return null
+  const n = Number(m[1])
+  const unit = (m[2] ?? 'm').toLowerCase()
+  const mult = unit === 's' ? 1000 : unit === 'h' ? 3_600_000 : 60_000
+  return Math.round(n * mult)
+}
+
 // Promote an Android build between Play tracks (internal/beta → production), no rebuild.
+// --after <dur> waits first (deploy.sh's `sleep 3000` — let Play finish processing the build).
 async function cmdPromote(p: Parsed, json: boolean): Promise<never> {
   const appRec = resolveApp(p)
   if (!appRec) { err('promote: no app — run inside a linked folder, or `droploid promote <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
@@ -193,6 +204,15 @@ async function cmdPromote(p: Parsed, json: boolean): Promise<never> {
   const from = str(p.flags.from) ?? 'internal'
   const to = str(p.flags.to) ?? 'production'
   const rollout = str(p.flags.rollout) ? Number(str(p.flags.rollout)) : undefined
+
+  const after = str(p.flags.after)
+  if (after) {
+    const ms = parseDurationMs(after)
+    if (ms === null) { err(`promote: bad --after "${after}" — use 50m, 2h, or 3000s`); return done(1, json, { error: 'bad_duration' }) }
+    err(`Waiting ${after} for Play to process the build, then promoting ${from} → ${to}…`)
+    await new Promise((r) => setTimeout(r, ms))
+  }
+
   err(`Promoting ${appRec.name}: Play ${from} → ${to}${rollout !== undefined ? ` @ ${Math.round(rollout * 100)}%` : ''}`)
   const code = await promoteAndroidTrack({
     appId: appRec.id, orgId: appRec.organisationId, from, to, rollout, onLine: (l) => err(l)
