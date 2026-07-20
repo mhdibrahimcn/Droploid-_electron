@@ -414,6 +414,36 @@ export async function startBuild(params: {
   callbacks.onComplete(iosResult, androidResult)
 }
 
+// Promote an already-uploaded Android build between Play tracks (deploy.sh option 4).
+// No rebuild, no upload — just `fastlane supply --track <from> --track_promote_to <to>`.
+// Android-only: iOS App Store go-live is gated on Apple review, not a track promote.
+export async function promoteAndroidTrack(params: {
+  appId: string
+  orgId: string
+  from: string
+  to: string
+  rollout?: number
+  onLine: (line: string) => void
+}): Promise<number> {
+  const { appId, orgId, from, to, rollout, onLine } = params
+  const app = store.get('apps', []).find((a) => a.id === appId)
+  if (!app) { onLine('promote: app not found'); return 1 }
+  if (!app.packageName) { onLine('promote: no Android package name on this app'); return 1 }
+  const jsonPath = await getCredential(orgId, 'android_json_path')
+  if (!jsonPath) { onLine('promote: no Android service-account JSON on this profile'); return 1 }
+  const args = [
+    'supply',
+    '--track', from,
+    '--track_promote_to', to,
+    '--package_name', app.packageName,
+    '--json_key', jsonPath,
+    '--skip_upload_metadata', '--skip_upload_changelogs', '--skip_upload_images', '--skip_upload_screenshots'
+  ]
+  if (rollout !== undefined && to === 'production') args.push('--rollout', String(rollout))
+  const active: ActiveBuild = { runId: `promote-${Date.now()}`, children: [], cancelled: false }
+  return spawnLine('fastlane', args, { env: { ...process.env, PATH: kDroploidPATH } }, onLine, active)
+}
+
 // Standalone OTA patch flow (deploy.sh option 5). Patches the latest shorebird release
 // over-the-air — no store upload. Only works on a build made with `shorebird release`.
 // `platform: 'both'` patches iOS then Android sequentially. Registered in activeBuilds so

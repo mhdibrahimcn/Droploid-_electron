@@ -10,7 +10,7 @@ import { store } from './services/store'
 import { setCredential, getCredential, deleteOrgCredentials } from './services/keychain'
 import { setAppStoreText } from './services/appStoreConnect'
 import { detect } from './services/projectDetector'
-import { getInitialCheckpoints, startBuild, startShorebirdPatch } from './services/buildEngine'
+import { getInitialCheckpoints, startBuild, startShorebirdPatch, promoteAndroidTrack } from './services/buildEngine'
 import { runPreflight } from './services/preflightChecker'
 import { checkAllTools } from './services/toolChecker'
 import { kLogsDir } from './utils/paths'
@@ -153,6 +153,7 @@ COMMANDS
   preflight <app>                      Run pre-deploy checks
   deploy <app> [options]               Build & upload
   patch <app>                          Shorebird OTA patch (no store upload)
+  promote [app] [--from t --to t]      Android: promote Play track internal→production (no rebuild)
   whatsnew [app] ["<text>"]            Set iOS "What's New" (text or droploid.yaml default)
   promo [app] ["<text>"]               Set iOS Promotional Text (text or droploid.yaml default)
   history <app>                        Recent build runs
@@ -183,6 +184,23 @@ WHAT --track production ACTUALLY DOES
   "wait N minutes then promote" flow can't make iOS live on a timer.
 
 --json on any command prints a machine-readable result to stdout (for AI agents).`
+
+// Promote an Android build between Play tracks (internal/beta → production), no rebuild.
+async function cmdPromote(p: Parsed, json: boolean): Promise<never> {
+  const appRec = resolveApp(p)
+  if (!appRec) { err('promote: no app — run inside a linked folder, or `droploid promote <id|name>`'); return done(1, json, { error: 'app_not_found' }) }
+  if (!appRec.packageName) { err(`promote: ${appRec.name} has no Android package — iOS can't be track-promoted (needs Apple review)`); return done(1, json, { error: 'no_package' }) }
+  const from = str(p.flags.from) ?? 'internal'
+  const to = str(p.flags.to) ?? 'production'
+  const rollout = str(p.flags.rollout) ? Number(str(p.flags.rollout)) : undefined
+  err(`Promoting ${appRec.name}: Play ${from} → ${to}${rollout !== undefined ? ` @ ${Math.round(rollout * 100)}%` : ''}`)
+  const code = await promoteAndroidTrack({
+    appId: appRec.id, orgId: appRec.organisationId, from, to, rollout, onLine: (l) => err(l)
+  })
+  if (code !== 0) { err('promote: failed — check the fastlane output above'); return done(1, json, { error: 'promote_failed', code }) }
+  err(`✓ Promoted ${appRec.name} → ${to}`)
+  return done(0, json, { app: appRec.name, from, to, rollout })
+}
 
 // Set App Store "What's New" / Promotional Text via the ASC API — no build, no fastlane.
 async function cmdStoreText(p: Parsed, json: boolean, field: 'whatsNew' | 'promotionalText'): Promise<never> {
@@ -608,6 +626,7 @@ export async function runCli(processArgv: string[]): Promise<void> {
       case 'init': case 'setup': return await cmdSetup()  // 'setup' kept as silent alias
       case 'promo': return await cmdStoreText(p, json, 'promotionalText')
       case 'whatsnew': return await cmdStoreText(p, json, 'whatsNew')
+      case 'promote': return await cmdPromote(p, json)
       case 'link': return cmdLink(p, json)
       case 'config-org': return await cmdConfigOrg(p, json)
       case 'preflight': return await cmdPreflight(p, json)
