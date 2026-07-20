@@ -351,6 +351,14 @@ async function cmdDeploy(p: Parsed, json: boolean): Promise<never> {
 
   err(`▶ Deploying ${appRec.name} (${platform}) v${appRec.currentVersion}${useShorebird ? ' [shorebird]' : ''}`)
 
+  // Show the plan upfront as a checklist, so you can see every step before it runs.
+  const autoPlan = parseAutoSpec(p)
+  err('\n  Plan:')
+  checkpoints.forEach((cp) => err(`    ☐ [${cp.platform}] ${cp.label}`))
+  if (autoPlan?.android !== undefined) err(`    ☐ [android] wait ${Math.round(autoPlan.android / 60_000)}m → promote to production`)
+  if (autoPlan?.ios !== undefined) err(`    ☐ [ios] wait ${Math.round(autoPlan.ios / 60_000)}m → submit for App Store review`)
+  err('')
+
   const combined: BuildResult = await new Promise((resolve) => {
     startBuild({
       runId, appId: appRec.id, orgId: appRec.organisationId, platform, bumpKind, track,
