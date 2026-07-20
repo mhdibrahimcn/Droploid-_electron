@@ -27,7 +27,8 @@ function extractFlutterName(dir: string): string {
   const yaml = readFileSafe(join(dir, 'pubspec.yaml'))
   if (!yaml) return basename(dir)
   const m = yaml.match(/^name:\s*(.+)/m)
-  return m ? m[1].trim() : basename(dir)
+  // strip surrounding quotes — `name: "foo"` is valid YAML but must not keep the quotes
+  return m ? m[1].trim().replace(/^["']|["']$/g, '') : basename(dir)
 }
 
 function extractBundleID(dir: string, type: ProjectType): string | undefined {

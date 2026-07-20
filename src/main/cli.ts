@@ -72,10 +72,13 @@ function findAppByCwd(): LinkedApp | undefined {
   return apps.find((a) => a.dirPath === cwd)
     ?? apps.filter((a) => cwd.startsWith(a.dirPath + '/')).sort((a, b) => b.dirPath.length - a.dirPath.length)[0]
 }
-// Resolve the target app: explicit --app/positional ref, else auto-detect from the current folder.
+// Resolve the target app: explicit --app/positional ref if it matches a real app,
+// otherwise auto-detect from the current folder (droploid.yaml marker, then dirPath).
+// Falling back on a non-matching ref means stray tokens (e.g. an unknown -t flag's
+// value landing as a positional) don't block folder detection.
 function resolveApp(p: Parsed): LinkedApp | undefined {
   const ref = appRef(p)
-  return ref ? findApp(ref) : findAppByCwd()
+  return (ref ? findApp(ref) : undefined) ?? findAppByCwd()
 }
 // Drop a droploid.yaml marker in the project so the repo shows which app it's linked to.
 // Non-fatal: a read-only dir shouldn't fail the link. Safe to commit.
