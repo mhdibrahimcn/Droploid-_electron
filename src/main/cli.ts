@@ -410,18 +410,29 @@ async function cmdSetup(): Promise<never> {
       if (!res) { rl.close(); return done(1, false, {}) }
       orgId = res.orgId; orgName = res.orgName
     }
-    const dir = await askPath('App project folder', true)
-    if (!dir) { rl.close(); err('init: app folder required'); return done(1, false, {}) }
-    const meta = detect(dir)
-    const appRec: LinkedApp = {
-      id: randomUUID(), organisationId: orgId, dirPath: dir, name: meta.name,
-      bundleID: meta.bundleID, packageName: meta.packageName, currentVersion: meta.version,
-      projectType: meta.projectType, xcodeSchemeName: meta.schemeName, iconPath: meta.iconPath,
-      linkedAt: new Date().toISOString()
+    // Default to the current folder (just press Enter); type another path, or 's' to skip.
+    const cwd = process.cwd()
+    out(`  ${C.dim}Press Enter to use the current folder, type another path, or 's' to skip.${C.reset}`)
+    const ans = await ask('App project folder', cwd)
+    if (/^(s|skip)$/i.test(ans)) {
+      out(`  ${C.dim}Skipped. Link later:  droploid link <dir> --org "${orgName}"${C.reset}`)
+    } else {
+      const dir = ans.replace(/^~/, homedir())
+      if (!existsSync(dir)) {
+        out(`  ${C.yellow}⚠ folder not found: ${dir}${C.reset}  ${C.dim}— skipped. Link later: droploid link <dir> --org "${orgName}"${C.reset}`)
+      } else {
+        const meta = detect(dir)
+        const appRec: LinkedApp = {
+          id: randomUUID(), organisationId: orgId, dirPath: dir, name: meta.name,
+          bundleID: meta.bundleID, packageName: meta.packageName, currentVersion: meta.version,
+          projectType: meta.projectType, xcodeSchemeName: meta.schemeName, iconPath: meta.iconPath,
+          linkedAt: new Date().toISOString()
+        }
+        store.set('apps', [...store.get('apps', []), appRec])
+        out(`\n  ${C.green}✓ Linked ${appRec.name}${C.reset}  ${meta.projectType} v${meta.version}  ${C.dim}(${appRec.id})${C.reset}`)
+        out(`\n  ${C.bold}Next:${C.reset}  droploid deploy "${appRec.name}"`)
+      }
     }
-    store.set('apps', [...store.get('apps', []), appRec])
-    out(`\n  ${C.green}✓ Linked ${appRec.name}${C.reset}  ${meta.projectType} v${meta.version}  ${C.dim}(${appRec.id})${C.reset}`)
-    out(`\n  ${C.bold}Next:${C.reset}  droploid deploy "${appRec.name}"`)
   }
 
   rl.close()
