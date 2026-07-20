@@ -280,22 +280,11 @@ async function cmdSetup(): Promise<never> {
     }
   }
 
-  banner('🚀 Droploid init')
-  out('  What do you want to do?')
-  out('  1) Create a profile (organisation + signing credentials)')
-  out('  2) Link an app to a profile')
-  out(`  3) Both — first-time setup ${C.dim}(recommended)${C.reset}\n`)
-  const choice = await ask('Choose', '3')
-  const doOrg = choice === '1' || choice === '3'
-  const doLink = choice === '2' || choice === '3'
-
-  let orgId: string | undefined
-  let orgName: string | undefined
-
-  if (doOrg) {
+  // Create a profile (org + signing creds) interactively. Returns null if the user aborts.
+  const createProfile = async (): Promise<{ orgId: string; orgName: string } | null> => {
     banner('🏢 New profile')
-    orgName = await ask('Profile / organisation name')
-    if (!orgName) { rl.close(); err('init: name required'); return done(1, false, {}) }
+    const orgName = await ask('Profile / organisation name')
+    if (!orgName) { err('init: name required'); return null }
 
     out('\n  Which platform credentials to add?')
     out('  1) iOS only  (App Store / TestFlight)')
@@ -337,7 +326,7 @@ async function cmdSetup(): Promise<never> {
       androidJsonPath = (await askPath('Path to service-account .json', false)) ?? ''
     }
 
-    orgId = randomUUID()
+    const orgId = randomUUID()
     if (iosKeyID) await setCredential(orgId, 'ios_key_id', iosKeyID)
     if (iosIssuerID) await setCredential(orgId, 'ios_issuer_id', iosIssuerID)
     if (iosTeamID) await setCredential(orgId, 'ios_team_id', iosTeamID)
@@ -346,18 +335,53 @@ async function cmdSetup(): Promise<never> {
     const org: Organisation = { id: orgId, name: orgName, createdAt: new Date().toISOString() }
     store.set('organisations', [...store.get('organisations', []), org])
     out(`\n  ${C.green}✓ Profile "${orgName}" saved${C.reset}  ${C.dim}(${orgId})${C.reset}`)
+    return { orgId, orgName }
+  }
+
+  banner('🚀 Droploid init')
+  out('  What do you want to do?')
+  out('  1) Create a profile (organisation + signing credentials)')
+  out('  2) Link an app to a profile')
+  out(`  3) Both — first-time setup ${C.dim}(recommended)${C.reset}\n`)
+  const choice = await ask('Choose', '3')
+  const doOrg = choice === '1' || choice === '3'
+  const doLink = choice === '2' || choice === '3'
+
+  let orgId: string | undefined
+  let orgName: string | undefined
+
+  if (doOrg) {
+    const res = await createProfile()
+    if (!res) { rl.close(); return done(1, false, {}) }
+    orgId = res.orgId; orgName = res.orgName
   }
 
   if (doLink) {
     banner('📱 Link an app')
     if (!orgId) {
       const orgs = store.get('organisations', [])
-      if (!orgs.length) { rl.close(); err('init: no profiles yet — run init and choose option 1 or 3'); return done(1, false, {}) }
-      orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
-      const pick = await ask('\n  Which profile', '1')
-      const org = orgs[Number(pick) - 1] ?? findOrg(pick)
-      if (!org) { rl.close(); err('init: invalid profile'); return done(1, false, {}) }
-      orgId = org.id; orgName = org.name
+      if (!orgs.length) {
+        // No account yet — create one first, then link into it.
+        out(`  ${C.dim}No profiles yet — let's create one first.${C.reset}`)
+        const res = await createProfile()
+        if (!res) { rl.close(); return done(1, false, {}) }
+        orgId = res.orgId; orgName = res.orgName
+      } else {
+        // Show existing accounts + a "create new" option.
+        orgs.forEach((o, i) => out(`  ${i + 1}) ${o.name}`))
+        const createIdx = orgs.length + 1
+        out(`  ${createIdx}) ${C.dim}Create new profile${C.reset}`)
+        const pick = await ask('\n  Which profile', '1')
+        if (pick === String(createIdx) || /^(new|create)$/i.test(pick)) {
+          const res = await createProfile()
+          if (!res) { rl.close(); return done(1, false, {}) }
+          orgId = res.orgId; orgName = res.orgName
+        } else {
+          const org = orgs[Number(pick) - 1] ?? findOrg(pick)
+          if (!org) { rl.close(); err('init: invalid profile'); return done(1, false, {}) }
+          orgId = org.id; orgName = org.name
+        }
+      }
     }
     const dir = await askPath('App project folder', true)
     if (!dir) { rl.close(); err('init: app folder required'); return done(1, false, {}) }
